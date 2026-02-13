@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Global P2P Chat (V17 Multimedia Magnet)</title>
+    <title>Global P2P Chat (V17 Legal Shield Edition)</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
@@ -38,7 +38,14 @@
         .input-group label { display: block; color: #8b949e; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;}
         .profile-input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #30363d; background: #0d1117; color: white; outline: none; font-size: 15px; transition: border 0.2s;}
         .profile-input:focus { border-color: #58a6ff; }
-        #save-profile-btn { width: 100%; padding: 16px; border-radius: 10px; background: #238636; color: white; border: none; font-weight: bold; font-size: 16px; margin-top: 10px; transition: background 0.2s; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
+        
+        /* 🔥 NEW T&C CHECKBOX CSS 🔥 */
+        .terms-group { display: flex; align-items: flex-start; gap: 10px; margin-top: 5px; margin-bottom: 20px; }
+        .terms-group input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: #58a6ff; cursor: pointer;}
+        .terms-group label { color: #8b949e; font-size: 12px; line-height: 1.4; text-transform: none; letter-spacing: normal; font-weight: normal;}
+        .terms-link { color: #58a6ff; text-decoration: underline; cursor: pointer; }
+        
+        #save-profile-btn { width: 100%; padding: 16px; border-radius: 10px; background: #238636; color: white; border: none; font-weight: bold; font-size: 16px; transition: background 0.2s; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
         #save-profile-btn:active { background: #2ea043; transform: scale(0.98); }
         
         #chat-window { flex: 1; overflow-y: auto; padding: 20px 15px; display: none; flex-direction: column; gap: 12px; scroll-behavior: smooth;}
@@ -46,7 +53,6 @@
         .my-message { background: #238636; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .stranger-message { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; align-self: flex-start; border-bottom-left-radius: 4px; }
         
-        /* 🔥 MEDIA CSS 🔥 */
         .chat-img { max-width: 100%; border-radius: 12px; margin-top: 5px; display: block; }
         .chat-audio { max-width: 220px; height: 40px; margin-top: 5px; outline: none; border-radius: 20px; }
         
@@ -60,6 +66,7 @@
         
         .media-btn { background: #21262d; color: white; border: 1px solid #30363d; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; cursor: pointer; transition: 0.2s; }
         .media-btn:active { background: #30363d; transform: scale(0.95); }
+        .mic-recording { background: #da3633 !important; border-color: #da3633 !important; animation: pulse 1s infinite; }
         
         #msg-input { flex: 1; padding: 12px 15px; border-radius: 24px; border: 1px solid #30363d; background: #0d1117; color: white; outline: none; font-size: 15px; transition: border 0.2s; min-width: 0;}
         #msg-input:focus { border-color: #8b949e; }
@@ -70,18 +77,23 @@
         #disconnect-btn { padding: 0; border-radius: 50%; background: #da3633; color: white; border: none; font-weight: bold; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; cursor: pointer;}
         #disconnect-btn:active { background: #f85149; transform: scale(0.95);}
 
-        /* 🔥 AUDIO RECORDING UI CSS 🔥 */
         #recording-timer-display { flex: 1; text-align: center; color: #da3633; font-weight: bold; font-family: monospace; font-size: 16px; letter-spacing: 1px; animation: pulse 1s infinite; }
 
-        #exit-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
-        .exit-modal-box { background: #161b22; width: 85%; max-width: 350px; border-radius: 16px; padding: 30px 25px; text-align: center; border: 1px solid #30363d; box-shadow: 0 20px 40px rgba(0,0,0,0.8); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .exit-modal-box h3 { color: white; font-size: 20px; margin-bottom: 12px; }
-        .exit-modal-box p { color: #8b949e; font-size: 14px; margin-bottom: 25px; line-height: 1.6; }
+        /* 🔥 MODALS CSS 🔥 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
+        .modal-box { background: #161b22; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; border: 1px solid #30363d; box-shadow: 0 20px 40px rgba(0,0,0,0.8); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; flex-direction: column;}
+        .modal-box h3 { color: white; font-size: 18px; margin-bottom: 12px; text-align: center;}
+        
+        /* T&C Scrollable Area */
+        .tnc-content { background: #0d1117; padding: 15px; border-radius: 8px; border: 1px solid #30363d; color: #8b949e; font-size: 13px; line-height: 1.5; max-height: 250px; overflow-y: auto; margin-bottom: 20px;}
+        .tnc-content h4 { color: #c9d1d9; margin-top: 10px; margin-bottom: 5px; font-size: 14px;}
+        
         .modal-buttons { display: flex; gap: 12px; }
         .btn-cancel { flex: 1; padding: 14px; border-radius: 10px; background: #21262d; color: white; border: 1px solid #30363d; font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s;}
         .btn-cancel:active { background: #30363d; }
         .btn-leave { flex: 1; padding: 14px; border-radius: 10px; background: #da3633; color: white; border: none; font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s;}
         .btn-leave:active { background: #f85149; }
+        .btn-full { width: 100%; background: #1f6feb; border: none; color: white; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; }
         
         @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
@@ -90,7 +102,7 @@
 
     <div id="header">
         <div id="default-header">
-            <h2>Global Mesh V17</h2>
+            <h2>Global Mesh</h2>
             <div id="status-bar">Profile Setup</div>
         </div>
         
@@ -106,14 +118,31 @@
         </div>
     </div>
 
-    <div id="exit-modal-overlay">
-        <div class="exit-modal-box">
+    <div id="exit-modal-overlay" class="modal-overlay">
+        <div class="modal-box" style="text-align: center;">
             <h3>Exit Chat?</h3>
-            <p>Are you sure you want to disconnect? This chat will be lost forever.</p>
+            <p style="color: #8b949e; font-size: 14px; margin-bottom: 25px;">Are you sure you want to disconnect? This chat will be lost forever.</p>
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModal()">Cancel</button>
                 <button class="btn-leave" onclick="confirmExit()">Leave Chat</button>
             </div>
+        </div>
+    </div>
+
+    <div id="tnc-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Terms & Conditions</h3>
+            <div class="tnc-content">
+                <h4>1. Acceptance & Age Restriction</h4>
+                You must be at least 18 years of age to use this platform. By using this service, you confirm you meet this requirement.
+                <h4>2. Peer-to-Peer (P2P) Architecture</h4>
+                This application operates on a direct Peer-to-Peer (WebRTC) network. <b>No messages, images, or audio are ever stored, hosted, or monitored on any server.</b>
+                <h4>3. Zero Developer Liability</h4>
+                Because data is transferred directly between users without server interception, the creator/developer has absolutely zero control over the content shared. <b>The developer is 100% legally indemnified and cannot be held responsible or liable for any user-generated content, illegal activities, or disputes.</b>
+                <h4>4. User Responsibility</h4>
+                You are solely responsible for your own actions and the content you share. Do not share illegal, explicit, or harmful material. Use at your own risk.
+            </div>
+            <button class="btn-full" onclick="closeTncModal()">I Understand</button>
         </div>
     </div>
 
@@ -131,12 +160,18 @@
                     <option value="Female">Female</option>
                 </select>
             </div>
+            
+            <div class="terms-group">
+                <input type="checkbox" id="terms-checkbox">
+                <label>I am 18+ and I agree to the <span class="terms-link" onclick="showTncModal()">Terms & Conditions</span>. I understand chats are P2P and not monitored by the creator.</label>
+            </div>
+
             <button id="save-profile-btn" onclick="saveProfile()">ENTER LOBBY</button>
         </div>
     </div>
 
     <div id="chat-window">
-        <div class="system-message">V17 Monster Magnet Online. 20 Slots Activated.</div>
+        <div class="system-message">Engine Online. Secured & Encrypted.</div>
     </div>
     
     <div id="action-area">
@@ -174,20 +209,53 @@
             msgInput: document.getElementById('msg-input'),
             userNameInput: document.getElementById('user-name'),
             userGenderInput: document.getElementById('user-gender'),
-            exitModal: document.getElementById('exit-modal-overlay')
+            exitModal: document.getElementById('exit-modal-overlay'),
+            tncModal: document.getElementById('tnc-modal-overlay'),
+            termsCheckbox: document.getElementById('terms-checkbox'),
+            micBtn: document.getElementById('mic-btn')
         };
 
+        // --- 🔥 MODAL LOGIC 🔥 ---
+        function showExitModal() { UI.exitModal.style.display = 'flex'; }
+        function closeModal() { UI.exitModal.style.display = 'none'; }
+        function confirmExit() { closeModal(); terminateSession(); }
+        
+        function showTncModal() { UI.tncModal.style.display = 'flex'; }
+        function closeTncModal() { UI.tncModal.style.display = 'none'; }
+
+        // Profile Logic
         let myProfile = { name: 'Stranger', gender: 'Unknown' };
+        
+        function saveProfile() {
+            // 🔥 T&C VALIDATION 🔥
+            if (!UI.termsCheckbox.checked) {
+                alert("⚠️ You must agree to the Terms & Conditions and confirm you are 18+ to enter the chat.");
+                return; // Stop execution if not checked
+            }
+
+            let nameVal = UI.userNameInput.value.trim();
+            if(nameVal === '') nameVal = 'Stranger';
+            
+            myProfile.name = nameVal;
+            myProfile.gender = UI.userGenderInput.value;
+
+            UI.setupContainer.style.display = 'none';
+            UI.chatBox.style.display = 'flex';
+            UI.actionArea.style.display = 'flex'; 
+            
+            connectSignalingServer();
+        }
+
+        // --- EVERYTHING BELOW THIS LINE IS THE UNTOUCHED V17 CORE ---
+        
         let typingTimer = null;
         let amITyping = false;
 
-        // Audio Recording Variables
         let mediaRecorder;
         let audioChunks = [];
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // 🔥 THE V17 MONSTER MAGNET ENGINE (UNTOUCHED 20 SLOTS) 🔥
         const TOTAL_SLOTS = 20; 
         
         let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -214,24 +282,6 @@
                 { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
             ]
         };
-
-        function showExitModal() { UI.exitModal.style.display = 'flex'; }
-        function closeModal() { UI.exitModal.style.display = 'none'; }
-        function confirmExit() { closeModal(); terminateSession(); }
-
-        function saveProfile() {
-            let nameVal = UI.userNameInput.value.trim();
-            if(nameVal === '') nameVal = 'Stranger';
-            
-            myProfile.name = nameVal;
-            myProfile.gender = UI.userGenderInput.value;
-
-            UI.setupContainer.style.display = 'none';
-            UI.chatBox.style.display = 'flex';
-            UI.actionArea.style.display = 'flex'; 
-            
-            connectSignalingServer();
-        }
 
         function connectSignalingServer() {
             updateStatus('Connecting to Core Engine...', '#8b949e');
@@ -287,7 +337,6 @@
         }
 
         async function handleSignalingData(payload) {
-            
             if (payload.type === 'magnet_pulse' && payload.senderId !== mySessionId && isSearching) {
                 if (mySessionId > payload.senderId) {
                     lockEngineAndHideEars();
@@ -468,7 +517,6 @@
             reader.readAsDataURL(file);
         }
 
-        // 🔥 NEW: WHATSAPP-STYLE AUDIO RECORDING UI LOGIC 🔥
         async function startAudioRecordingUI() {
             if (!dataChannel || dataChannel.readyState !== 'open') return;
             try {
@@ -480,7 +528,6 @@
                     audioChunks.push(event.data);
                 };
 
-                // UI Changes - Hide normal inputs, Show recording tools
                 document.getElementById('photo-btn').style.display = 'none';
                 document.getElementById('mic-btn').style.display = 'none';
                 document.getElementById('msg-input').style.display = 'none';
@@ -490,7 +537,6 @@
                 document.getElementById('recording-timer-display').style.display = 'block';
                 document.getElementById('send-audio-btn').style.display = 'flex';
 
-                // Start Timer
                 recordSeconds = 0;
                 document.getElementById('recording-timer-display').innerText = '🔴 00:00';
                 recordTimerInterval = setInterval(() => {
@@ -508,7 +554,7 @@
 
         function cancelAudioRecording() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.onstop = null; // Prevent the send logic
+                mediaRecorder.onstop = null; 
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
             }
@@ -526,7 +572,6 @@
                         dataChannel.send(JSON.stringify({ type: 'audio', content: base64Audio, profile: myProfile }));
                         renderMessage(base64Audio, 'mine', 'audio');
                     };
-                    // Turn off mic hardware
                     mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 };
                 mediaRecorder.stop();
@@ -537,15 +582,13 @@
         function resetAudioUI() {
             clearInterval(recordTimerInterval);
             
-            // Hide recording tools
             document.getElementById('cancel-audio-btn').style.display = 'none';
             document.getElementById('recording-timer-display').style.display = 'none';
             document.getElementById('send-audio-btn').style.display = 'none';
 
-            // Show normal inputs
             document.getElementById('photo-btn').style.display = 'flex';
             document.getElementById('mic-btn').style.display = 'flex';
-            document.getElementById('msg-input').style.display = ''; // Reverts to CSS default (flex)
+            document.getElementById('msg-input').style.display = ''; 
             document.getElementById('send-btn').style.display = 'block';
         }
 
@@ -595,7 +638,6 @@
             clearTimeout(typingTimer);
             amITyping = false;
             
-            // Fix: If user exits while recording, cancel recording safely
             cancelAudioRecording();
             
             mqttClient.unsubscribe(PRIVATE_TOPIC);
