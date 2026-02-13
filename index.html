@@ -46,7 +46,7 @@
         .my-message { background: #238636; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .stranger-message { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; align-self: flex-start; border-bottom-left-radius: 4px; }
         
-        /* 🔥 NEW MEDIA CSS 🔥 */
+        /* 🔥 MEDIA CSS 🔥 */
         .chat-img { max-width: 100%; border-radius: 12px; margin-top: 5px; display: block; }
         .chat-audio { max-width: 220px; height: 40px; margin-top: 5px; outline: none; border-radius: 20px; }
         
@@ -56,12 +56,10 @@
         #find-btn { width: 100%; padding: 16px; border-radius: 10px; background: #1f6feb; color: white; border: none; font-weight: bold; font-size: 16px; transition: 0.2s; text-transform: uppercase; cursor: pointer; letter-spacing: 1px; box-shadow: 0 4px 10px rgba(31, 111, 235, 0.3);}
         #find-btn:active { background: #388bfd; transform: scale(0.98); }
         
-        /* 🔥 NEW INPUT CONTAINER LAYOUT 🔥 */
         #input-container { display: none; gap: 6px; align-items: center; width: 100%; }
         
         .media-btn { background: #21262d; color: white; border: 1px solid #30363d; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; cursor: pointer; transition: 0.2s; }
         .media-btn:active { background: #30363d; transform: scale(0.95); }
-        .mic-recording { background: #da3633 !important; border-color: #da3633 !important; animation: pulse 1s infinite; }
         
         #msg-input { flex: 1; padding: 12px 15px; border-radius: 24px; border: 1px solid #30363d; background: #0d1117; color: white; outline: none; font-size: 15px; transition: border 0.2s; min-width: 0;}
         #msg-input:focus { border-color: #8b949e; }
@@ -71,6 +69,9 @@
         
         #disconnect-btn { padding: 0; border-radius: 50%; background: #da3633; color: white; border: none; font-weight: bold; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; cursor: pointer;}
         #disconnect-btn:active { background: #f85149; transform: scale(0.95);}
+
+        /* 🔥 AUDIO RECORDING UI CSS 🔥 */
+        #recording-timer-display { flex: 1; text-align: center; color: #da3633; font-weight: bold; font-family: monospace; font-size: 16px; letter-spacing: 1px; animation: pulse 1s infinite; }
 
         #exit-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
         .exit-modal-box { background: #161b22; width: 85%; max-width: 350px; border-radius: 16px; padding: 30px 25px; text-align: center; border: 1px solid #30363d; box-shadow: 0 20px 40px rgba(0,0,0,0.8); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
@@ -146,10 +147,14 @@
             <button class="media-btn" id="photo-btn" onclick="document.getElementById('image-input').click()">📷</button>
             <input type="file" id="image-input" accept="image/*" style="display: none;" onchange="handleImageSelection(event)">
             
-            <button class="media-btn" id="mic-btn" onmousedown="startAudioRecording()" onmouseup="stopAudioRecording()" ontouchstart="startAudioRecording()" ontouchend="stopAudioRecording()">🎤</button>
+            <button class="media-btn" id="mic-btn" onclick="startAudioRecordingUI()">🎤</button>
 
             <input type="text" id="msg-input" placeholder="Type a message..." oninput="handleTypingEvent()" onkeypress="handleKeypress(event)">
             <button id="send-btn" onclick="sendDataChannelMessage()">SEND</button>
+
+            <button class="media-btn" id="cancel-audio-btn" style="display: none; background: #da3633; border-color: #da3633;" onclick="cancelAudioRecording()">🗑️</button>
+            <div id="recording-timer-display" style="display: none;">🔴 00:00</div>
+            <button class="media-btn" id="send-audio-btn" style="display: none; background: #238636; border-color: #238636;" onclick="sendAudioRecording()">✅</button>
         </div>
     </div>
 
@@ -169,8 +174,7 @@
             msgInput: document.getElementById('msg-input'),
             userNameInput: document.getElementById('user-name'),
             userGenderInput: document.getElementById('user-gender'),
-            exitModal: document.getElementById('exit-modal-overlay'),
-            micBtn: document.getElementById('mic-btn')
+            exitModal: document.getElementById('exit-modal-overlay')
         };
 
         let myProfile = { name: 'Stranger', gender: 'Unknown' };
@@ -180,6 +184,8 @@
         // Audio Recording Variables
         let mediaRecorder;
         let audioChunks = [];
+        let recordTimerInterval = null;
+        let recordSeconds = 0;
 
         // 🔥 THE V17 MONSTER MAGNET ENGINE (UNTOUCHED 20 SLOTS) 🔥
         const TOTAL_SLOTS = 20; 
@@ -436,7 +442,6 @@
             UI.msgInput.value = '';
         }
 
-        // 🔥 NEW: ON-THE-FLY IMAGE COMPRESSOR & SENDER 🔥
         function handleImageSelection(event) {
             const file = event.target.files[0];
             if (!file || !dataChannel || dataChannel.readyState !== 'open') return;
@@ -446,7 +451,6 @@
                 const img = new Image();
                 img.src = e.target.result;
                 img.onload = function() {
-                    // Compress Image to prevent WebRTC pipe burst
                     const canvas = document.createElement('canvas');
                     const MAX_WIDTH = 500;
                     const scaleSize = MAX_WIDTH / img.width;
@@ -456,10 +460,7 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     
-                    // Convert to Base64 Text (Quality 0.5)
                     const base64Img = canvas.toDataURL('image/jpeg', 0.5);
-                    
-                    // Send over WebRTC
                     dataChannel.send(JSON.stringify({ type: 'image', content: base64Img, profile: myProfile }));
                     renderMessage(base64Img, 'mine', 'image');
                 }
@@ -467,8 +468,8 @@
             reader.readAsDataURL(file);
         }
 
-        // 🔥 NEW: AUDIO RECORDER & SENDER 🔥
-        async function startAudioRecording() {
+        // 🔥 NEW: WHATSAPP-STYLE AUDIO RECORDING UI LOGIC 🔥
+        async function startAudioRecordingUI() {
             if (!dataChannel || dataChannel.readyState !== 'open') return;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -479,6 +480,43 @@
                     audioChunks.push(event.data);
                 };
 
+                // UI Changes - Hide normal inputs, Show recording tools
+                document.getElementById('photo-btn').style.display = 'none';
+                document.getElementById('mic-btn').style.display = 'none';
+                document.getElementById('msg-input').style.display = 'none';
+                document.getElementById('send-btn').style.display = 'none';
+
+                document.getElementById('cancel-audio-btn').style.display = 'flex';
+                document.getElementById('recording-timer-display').style.display = 'block';
+                document.getElementById('send-audio-btn').style.display = 'flex';
+
+                // Start Timer
+                recordSeconds = 0;
+                document.getElementById('recording-timer-display').innerText = '🔴 00:00';
+                recordTimerInterval = setInterval(() => {
+                    recordSeconds++;
+                    let mins = Math.floor(recordSeconds / 60).toString().padStart(2, '0');
+                    let secs = (recordSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('recording-timer-display').innerText = `🔴 ${mins}:${secs}`;
+                }, 1000);
+
+                mediaRecorder.start();
+            } catch (err) {
+                alert("Please allow Microphone access to send voice notes!");
+            }
+        }
+
+        function cancelAudioRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.onstop = null; // Prevent the send logic
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            resetAudioUI();
+        }
+
+        function sendAudioRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.onstop = () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     const reader = new FileReader();
@@ -488,25 +526,29 @@
                         dataChannel.send(JSON.stringify({ type: 'audio', content: base64Audio, profile: myProfile }));
                         renderMessage(base64Audio, 'mine', 'audio');
                     };
-                    // Stop all microphone tracks to turn off the red dot
-                    stream.getTracks().forEach(track => track.stop());
+                    // Turn off mic hardware
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 };
-
-                mediaRecorder.start();
-                UI.micBtn.classList.add('mic-recording'); // Add red pulse effect
-            } catch (err) {
-                alert("Please allow Microphone access to send voice notes!");
-            }
-        }
-
-        function stopAudioRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
-                UI.micBtn.classList.remove('mic-recording');
             }
+            resetAudioUI();
         }
 
-        // 🔥 UPDATED RENDERER FOR MEDIA 🔥
+        function resetAudioUI() {
+            clearInterval(recordTimerInterval);
+            
+            // Hide recording tools
+            document.getElementById('cancel-audio-btn').style.display = 'none';
+            document.getElementById('recording-timer-display').style.display = 'none';
+            document.getElementById('send-audio-btn').style.display = 'none';
+
+            // Show normal inputs
+            document.getElementById('photo-btn').style.display = 'flex';
+            document.getElementById('mic-btn').style.display = 'flex';
+            document.getElementById('msg-input').style.display = ''; // Reverts to CSS default (flex)
+            document.getElementById('send-btn').style.display = 'block';
+        }
+
         function renderMessage(content, type, msgFormat = 'text') {
             const wrapper = document.createElement('div');
             wrapper.className = `message ${type === 'mine' ? 'my-message' : 'stranger-message'}`;
@@ -552,6 +594,9 @@
             lockEngineAndHideEars(); 
             clearTimeout(typingTimer);
             amITyping = false;
+            
+            // Fix: If user exits while recording, cancel recording safely
+            cancelAudioRecording();
             
             mqttClient.unsubscribe(PRIVATE_TOPIC);
             mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
