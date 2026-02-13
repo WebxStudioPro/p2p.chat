@@ -3,268 +3,192 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Krish Chat Final</title>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <title>Global Random Chat</title>
     
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+
     <style>
         * { box-sizing: border-box; }
-        body { font-family: sans-serif; background: #e5ddd5; margin: 0; height: 100vh; display: flex; flex-direction: column; }
-
-        /* Header with Diagnostics */
-        header {
-            background: #075e54;
-            color: white;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-
-        .status-dot {
-            height: 12px;
-            width: 12px;
-            background-color: red; /* Default Red (Offline) */
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 5px;
-            border: 2px solid white;
-        }
-
-        /* Chat Area */
-        #chat-box {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .info-box {
-            background: #fff;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-
-        .btn {
-            background: #25D366;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
-        }
-
-        /* Messages */
-        .msg { padding: 10px 15px; border-radius: 10px; max-width: 80%; word-wrap: break-word; }
-        .me { align-self: flex-end; background: #dcf8c6; }
-        .stranger { align-self: flex-start; background: white; }
-
-        /* Footer */
-        footer {
-            background: #f0f0f0;
-            padding: 10px;
-            display: flex;
-            gap: 10px;
-        }
-        input { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #ccc; outline: none; }
-        #send-btn { background: #075e54; color: white; border: none; padding: 10px 15px; border-radius: 50%; }
+        body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #header { padding: 15px; background: #1f1f1f; text-align: center; border-bottom: 2px solid #00ff88; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { margin: 0; font-size: 20px; color: #00ff88; }
+        #status { font-size: 12px; color: #aaa; margin-top: 5px; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #000; }
+        .msg { padding: 10px 15px; border-radius: 20px; max-width: 85%; word-wrap: break-word; font-size: 15px; }
+        .mine { background: #00ff88; color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .stranger { background: #333; color: #fff; align-self: flex-start; border-bottom-left-radius: 2px; }
+        #controls { padding: 10px; display: none; gap: 8px; background: #1f1f1f; }
+        input { flex: 1; padding: 12px; border-radius: 20px; border: none; background: #333; color: white; outline: none; font-size: 15px; }
+        button { padding: 12px 20px; border-radius: 20px; background: #00ff88; color: black; border: none; font-weight: bold; font-size: 14px; }
+        #findBtn { margin: 20px auto; display: block; padding: 15px 30px; font-size: 16px; width: 80%; max-width: 300px; border-radius: 30px; }
+        .system-msg { text-align: center; color: #888; font-size: 12px; margin: 10px 0; }
     </style>
 </head>
 <body>
 
-    <header>
-        <div style="display:flex; align-items:center;">
-            <span id="conn-dot" class="status-dot"></span>
-            <span id="conn-text">Connecting...</span>
-        </div>
-        <div id="user-count" style="font-size:12px;">Users Waiting: 0</div>
-    </header>
-
-    <div id="chat-box">
-        <div class="info-box" id="dashboard">
-            <h3>Ready to Connect?</h3>
-            <p style="font-size: 12px; color: #555;">
-                Tip: Chat karne ke liye doosra phone bhi open hona chahiye!
-            </p>
-            <button class="btn" onclick="startMatching()">FIND PARTNER</button>
-        </div>
+    <div id="header">
+        <h2>Global Chat (No Limits)</h2>
+        <div id="status">Connecting to Global Network...</div>
     </div>
 
-    <footer id="footer" style="display:none;">
-        <input type="text" id="msg-input" placeholder="Type message...">
-        <button id="send-btn" onclick="sendMessage()">➤</button>
-    </footer>
+    <div id="chat-box">
+        <div class="system-msg">Welcome! Press the button to find a stranger.</div>
+    </div>
+    
+    <button id="findBtn" onclick="findStranger()">🔍 FIND STRANGER</button>
+
+    <div id="controls">
+        <input type="text" id="msgInput" placeholder="Type message..." onkeypress="handleEnter(event)">
+        <button onclick="sendMessage()">SEND</button>
+    </div>
 
     <script>
-        // 1. Purana kachra saaf karo (Fresh Start)
-        localStorage.clear();
-
-        // 2. Gun.js Servers (Zada servers = Better chance)
-        const peers = [
-            'https://gun-manhattan.herokuapp.com/gun',
-            'https://gun-us.herokuapp.com/gun',
-            'https://gun-eu.herokuapp.com/gun',
-            'https://my-gun-node.herokuapp.com/gun' // Backup
-        ];
-
-        const gun = Gun({ peers: peers, localStorage: false });
-        const myID = Math.random().toString(36).substring(7);
-        // Ekdum naya room name taaki purane users se mix na ho
-        const appDB = gun.get('krish_chat_final_v99'); 
-
-        // Elements
-        const dot = document.getElementById('conn-dot');
-        const connText = document.getElementById('conn-text');
-        const countText = document.getElementById('user-count');
+        // UI Elements
+        const statusEl = document.getElementById('status');
         const chatBox = document.getElementById('chat-box');
-        const dashboard = document.getElementById('dashboard');
-        const footer = document.getElementById('footer');
-        const inputField = document.getElementById('msg-input');
+        const controls = document.getElementById('controls');
+        const findBtn = document.getElementById('findBtn');
+        const msgInput = document.getElementById('msgInput');
 
-        let currentRoom = null;
+        // --- CORE ARCHITECTURE ---
+        let peer = null;        // Call Engine
+        let myPeerId = null;    // Mera global mobile ID
+        let currentChat = null; // Connection object
         let searching = false;
 
-        // --- Step 1: Check Connection ---
-        setTimeout(() => {
-            // Agar 2 sec baad bhi connect nahi hua, to shayed network issue hai
-            if(dot.style.backgroundColor !== 'lime') {
-                connText.innerText = "Slow Network...";
-            }
-        }, 5000);
-
-        // Gun.js "hi" event logic to check connection
-        // (Yeh hack hai kyunki Gun direct event nahi deta, hum data fetch karke check karenge)
-        appDB.get('ping').put({ time: Date.now() }, (ack) => {
-            if(ack.err) {
-                connText.innerText = "Offline";
-                dot.style.backgroundColor = "red";
-            } else {
-                connText.innerText = "Online";
-                dot.style.backgroundColor = "lime"; // GREEN LIGHT
-            }
+        // 1. Zinda Gun.js Relays (Ye dead nahi hain)
+        const gun = Gun({
+            peers: [
+                'https://relay.peer.ooo/gun',
+                'https://peer.wallie.io/gun'
+            ],
+            localStorage: false // Phone ki memory bachane ke liye
         });
 
-        // --- Step 2: Users Count (Waiting List Monitor) ---
-        // Hum check karenge ki 'waiting' list mein kitne keys hain
-        setInterval(() => {
-            let count = 0;
-            appDB.get('waiting').map().once((data, key) => {
-                if(data && (Date.now() - data.time < 10000)) { // 10 sec active
-                    count++;
+        // 2. Initialize PeerJS (Auto STUN servers for Mobile Networks)
+        function initPeer() {
+            peer = new Peer({
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' }, // Google STUN for Jio/Airtel
+                        { urls: 'stun:global.stun.twilio.com:3478' } // Backup STUN
+                    ]
                 }
             });
-            // Update UI (Thoda delay taaki count sahi ho)
-            setTimeout(() => { countText.innerText = "Users Waiting: " + count; }, 1000);
-        }, 3000);
 
+            peer.on('open', (id) => {
+                myPeerId = id;
+                statusEl.innerText = "Network Ready! (Your ID hidden securely)";
+                statusEl.style.color = "#00ff88";
+            });
 
-        // --- Step 3: Start Matching ---
-        function startMatching() {
-            if(dot.style.backgroundColor === 'red') {
-                alert("Ruko bhai! Abhi server se connect nahi hua (Red Dot). Internet check karo.");
-                return;
-            }
+            // Koi dusra stranger mujhe connect kare toh:
+            peer.on('connection', (conn) => {
+                if(searching) {
+                    setupChat(conn);
+                } else {
+                    conn.close(); // Agar main chat me hu, toh reject kar do
+                }
+            });
+        }
 
-            dashboard.innerHTML = "<h3>Searching...</h3><p>Dhyaan de: Doosre phone par bhi 'FIND PARTNER' dabana zaroori hai!</p>";
+        // App start hote hi Peer engine chalu karo
+        initPeer();
+
+        // 3. MATCHMAKING LOGIC (The Lobby)
+        function findStranger() {
+            if (!myPeerId) return alert("Please wait, connecting to network...");
+            
             searching = true;
+            findBtn.style.display = 'none';
+            statusEl.innerText = "Scanning the globe for strangers...";
+            statusEl.style.color = "#ffaa00";
+            chatBox.innerHTML = '<div class="system-msg">Searching...</div>';
+            controls.style.display = 'none';
 
-            // Strategy:
-            // 1. Check karo koi aur wait kar raha hai?
-            // 2. Agar haan -> Connect.
-            // 3. Agar nahi -> Khud wait karo.
+            const lobby = gun.get('global-chat-lobby-v2');
 
-            let found = false;
-
-            appDB.get('waiting').map().once((data, key) => {
-                if(found || !searching) return;
-
-                // Agar banda valid hai, active hai, aur main khud nahi hu
-                if(data && key !== myID && (Date.now() - data.time < 15000)) {
-                    found = true;
-                    searching = false;
-                    console.log("Partner mila:", key);
-
-                    // Handshake
-                    const roomID = 'chat_' + Math.random().toString(36).substring(7);
-                    appDB.get('waiting').get(key).put(null); // Usko hatao
-                    appDB.get('invites').get(key).put({ room: roomID }); // Invite bhejo
+            // Lobby check karo
+            lobby.once((data) => {
+                const now = Date.now();
+                
+                if (data && data.waitingId && data.waitingId !== myPeerId && (now - data.time < 15000)) {
+                    // STRANGER MIL GAYA! (Lobby me koi 15 sec se wait kar raha tha)
+                    const strangerId = data.waitingId;
+                    lobby.put({ waitingId: null, time: 0 }); // Lobby saaf karo
                     
-                    joinChat(roomID);
-                }
-            });
-
-            // Agar 2 sec tak koi nahi mila, to khud wait karo
-            setTimeout(() => {
-                if(!found && searching) {
-                    console.log("Koi nahi mila, main wait kar raha hu...");
-                    dashboard.innerHTML = "<h3>Waiting...</h3><p>Looking for someone...</p>";
+                    statusEl.innerText = "Stranger Found! Connecting...";
                     
-                    // Add myself to waiting
-                    appDB.get('waiting').get(myID).put({ time: Date.now() });
-
-                    // Keep refreshing timestamp so I stay "Active"
-                    let keepAlive = setInterval(() => {
-                        if(!searching) clearInterval(keepAlive);
-                        else appDB.get('waiting').get(myID).put({ time: Date.now() });
-                    }, 2000);
-
-                    // Listen for invites
-                    appDB.get('invites').get(myID).on((data) => {
-                        if(data && data.room && searching) {
-                            searching = false;
-                            joinChat(data.room);
-                        }
-                    });
-                }
-            }, 1500);
-        }
-
-        // --- Step 4: Chat Room ---
-        function joinChat(roomID) {
-            currentRoom = roomID;
-            dashboard.style.display = 'none'; // Info box hatao
-            footer.style.display = 'flex';    // Chat input dikhao
-            
-            const sysMsg = document.createElement('div');
-            sysMsg.className = 'info-box';
-            sysMsg.innerHTML = "<b>Connected! Say Hi 👋</b>";
-            chatBox.appendChild(sysMsg);
-
-            // Listen for messages
-            gun.get(roomID).map().on((data, id) => {
-                if(data && !document.getElementById(id)) {
-                    const div = document.createElement('div');
-                    div.id = id;
-                    div.className = data.sender === myID ? 'msg me' : 'msg stranger';
-                    div.innerText = data.text;
-                    chatBox.appendChild(div);
-                    chatBox.scrollTop = chatBox.scrollHeight;
+                    // PeerJS se direct connect maro
+                    const conn = peer.connect(strangerId);
+                    setupChat(conn);
+                } else {
+                    // LOBBY KHALI HAI, MAIN WAIT KARUNGA
+                    lobby.put({ waitingId: myPeerId, time: now });
+                    statusEl.innerText = "Waiting for someone to join...";
+                    
+                    // Ab 'peer.on("connection")' apne aap trigger hoga jab koi aayega
                 }
             });
         }
 
+        // 4. CHAT SETUP (Jab 2 log mil jaye)
+        function setupChat(conn) {
+            currentChat = conn;
+            searching = false;
+
+            conn.on('open', () => {
+                statusEl.innerText = "Connected! Say Hi 👋";
+                statusEl.style.color = "#00ff88";
+                controls.style.display = 'flex';
+                chatBox.innerHTML = '<div class="system-msg">You are now chatting with a random stranger.</div>';
+            });
+
+            // Message Receive karna
+            conn.on('data', (data) => {
+                displayMsg(data, 'stranger');
+            });
+
+            // Agar stranger disconnect ho jaye
+            conn.on('close', () => {
+                chatBox.innerHTML += '<div class="system-msg">Stranger has disconnected.</div>';
+                endChat();
+            });
+        }
+
+        // 5. SEND & DISPLAY MESSAGES
         function sendMessage() {
-            const txt = inputField.value;
-            if(!txt) return;
-            inputField.value = '';
-            
-            // UI Update Instant
-            // (Note: Real Gun update listener se bhi aayega, but for speed hum khud add karte hain)
-            
-            gun.get(currentRoom).set({
-                text: txt,
-                sender: myID,
-                time: Date.now()
-            });
+            const text = msgInput.value.trim();
+            if (!text || !currentChat) return;
+
+            // Direct mobile to mobile send (No server in between)
+            currentChat.send(text);
+            displayMsg(text, 'mine');
+            msgInput.value = '';
+        }
+
+        function displayMsg(text, senderType) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + senderType;
+            div.innerText = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto scroll
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        function endChat() {
+            if(currentChat) currentChat.close();
+            controls.style.display = 'none';
+            findBtn.style.display = 'block';
+            findBtn.innerText = "🔍 FIND NEW STRANGER";
+            statusEl.innerText = "Disconnected.";
+            statusEl.style.color = "red";
+            currentChat = null;
         }
     </script>
 </body>
