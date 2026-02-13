@@ -41,7 +41,6 @@
         .profile-input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #30363d; background: #0d1117; color: white; outline: none; font-size: 15px; transition: border 0.2s;}
         .profile-input:focus { border-color: #58a6ff; }
         
-        /* 🔥 NEW T&C CHECKBOX CSS 🔥 */
         .terms-group { display: flex; align-items: flex-start; gap: 10px; margin-top: 5px; margin-bottom: 20px; }
         .terms-group input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: #58a6ff; cursor: pointer;}
         .terms-group label { color: #8b949e; font-size: 12px; line-height: 1.4; text-transform: none; letter-spacing: normal; font-weight: normal;}
@@ -81,12 +80,10 @@
 
         #recording-timer-display { flex: 1; text-align: center; color: #da3633; font-weight: bold; font-family: monospace; font-size: 16px; letter-spacing: 1px; animation: pulse 1s infinite; }
 
-        /* 🔥 MODALS CSS 🔥 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
         .modal-box { background: #161b22; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; border: 1px solid #30363d; box-shadow: 0 20px 40px rgba(0,0,0,0.8); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; flex-direction: column;}
         .modal-box h3 { color: white; font-size: 18px; margin-bottom: 12px; text-align: center;}
         
-        /* T&C Scrollable Area */
         .tnc-content { background: #0d1117; padding: 15px; border-radius: 8px; border: 1px solid #30363d; color: #8b949e; font-size: 13px; line-height: 1.5; max-height: 250px; overflow-y: auto; margin-bottom: 20px;}
         .tnc-content h4 { color: #c9d1d9; margin-top: 10px; margin-bottom: 5px; font-size: 14px;}
         
@@ -217,7 +214,6 @@
             micBtn: document.getElementById('mic-btn')
         };
 
-        // --- 🔥 MODAL LOGIC 🔥 ---
         function showExitModal() { UI.exitModal.style.display = 'flex'; }
         function closeModal() { UI.exitModal.style.display = 'none'; }
         function confirmExit() { closeModal(); terminateSession(); }
@@ -225,7 +221,6 @@
         function showTncModal() { UI.tncModal.style.display = 'flex'; }
         function closeTncModal() { UI.tncModal.style.display = 'none'; }
 
-        // Profile Logic
         let myProfile = { name: 'Stranger', gender: 'Unknown' };
         
         function saveProfile() {
@@ -247,8 +242,6 @@
             connectSignalingServer();
         }
 
-        // --- UNTOUCHED V17 CORE WITH ADDED ADMIN HEARTBEAT ---
-        
         let typingTimer = null;
         let amITyping = false;
 
@@ -283,17 +276,6 @@
                 { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
             ]
         };
-
-        // 🔥 ADMIN HEARTBEAT LOGIC: Silent connection to tell admin we are here
-        const heartbeatClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-        heartbeatClient.on('connect', () => {
-            // Tell admin we are online every 3 seconds
-            setInterval(() => {
-                const status = (peerConnection && peerConnection.connectionState === 'connected') ? 'chatting' : 
-                               (isSearching ? 'searching' : 'idle');
-                heartbeatClient.publish('krish_v17_admin_heartbeat', JSON.stringify({ id: mySessionId, status: status }));
-            }, 3000);
-        });
 
         function connectSignalingServer() {
             updateStatus('Connecting to Core Engine...', '#8b949e');
@@ -673,6 +655,34 @@
                 printSystemMessage(isRemoteDisconnect ? 'Stranger has disconnected. Memory cleared.' : 'You left the chat. Memory cleared.');
             }
         }
+
+        // 🔥 ADMIN RADAR SYNC (FLAWLESS EDITION) 🔥
+        // Ye code tabhi se chalega jaise hi user website open karega, aur sirf UI ko read karke admin ko batayega!
+        const adminSyncClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        
+        function getExactState() {
+            if (UI.setupContainer.style.display !== 'none') return 'SETUP'; // Abhi ID bana raha hai
+            if (isSearching) return 'SEARCHING'; // Slot me dhoondh raha hai
+            if (UI.chatHeader.style.display === 'flex') return 'CHATTING'; // Chat kar raha hai
+            return 'LOBBY'; // Enter kar chuka hai par dhoondh nahi raha
+        }
+
+        adminSyncClient.on('connect', () => {
+            setInterval(() => {
+                let activeSlot = '0';
+                if (isSearching && myPublishSlot) {
+                    activeSlot = myPublishSlot.split('_').pop();
+                }
+                
+                const payload = {
+                    id: mySessionId,
+                    state: getExactState(),
+                    slot: activeSlot
+                };
+                
+                adminSyncClient.publish('krish_v17_admin_radar_sync', JSON.stringify(payload));
+            }, 2500); // Har 2.5 second me exact status bhejega
+        });
     </script>
 </body>
 </html>
