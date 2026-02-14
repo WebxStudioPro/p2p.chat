@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
     <meta name="google-site-verification" content="87zIiOu8V4ybkIjdxacQm0x9CX2RwrOvYJRU8v_ZYp4" />
+
     <title>Random Chat - Online Peer to Peer Stranger Chat</title>
     <meta name="description" content="Join the fastest online random chat. Connect with strangers instantly on our secure, anonymous, peer to peer chat platform. Start your chat with stranger now.">
     <meta name="keywords" content="random chat, peer to peer chat, online chat, stranger chat, chat with stranger, instant chat, free anonymous chat">
     <meta name="robots" content="index, follow">
+
     <link rel="icon" type="image/png" href="favicon.png">
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -18,13 +20,8 @@
         
         body { background-color: #0d1117; color: #c9d1d9; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
         
-        /* 🔥 THE SAFETY SPACER: Keeps UI safely below the Top Ad 🔥 */
-        #ad-spacer {
-            width: 100%;
-            height: 85px; 
-            flex-shrink: 0;
-            background: transparent;
-        }
+        /* ADSTERRA SAFETY SPACER (100% SAFE) */
+        #ad-spacer { width: 100%; height: 85px; flex-shrink: 0; background: transparent; }
 
         #header { padding: 15px; background: rgba(22, 27, 34, 0.95); backdrop-filter: blur(5px); text-align: center; border-bottom: 1px solid #30363d; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 10; min-height: 70px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.3s ease;}
         
@@ -46,82 +43,25 @@
         #typing-indicator { font-size: 12px; color: #3fb950; font-weight: bold; display: none; font-style: italic; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
         
-        #setup-container { 
-            flex: 1; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            padding: 20px; 
-            background: radial-gradient(circle at center, #161b22 0%, #0d1117 100%);
-            overflow-y: auto; 
-        }
+        #setup-container { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; background: radial-gradient(circle at center, #161b22 0%, #0d1117 100%); overflow-y: auto; }
         
-        .setup-box { 
-            width: 100%;
-            max-width: 420px;
-            background: rgba(22, 27, 34, 0.6); 
-            backdrop-filter: blur(12px);
-            padding: 35px 25px; 
-            border-radius: 24px; 
-            border: 1px solid rgba(255,255,255,0.08); 
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02); 
-            margin-top: 1vh;
-            flex-shrink: 0;
-        }
+        .setup-box { width: 100%; max-width: 420px; background: rgba(22, 27, 34, 0.6); backdrop-filter: blur(12px); padding: 35px 25px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 25px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02); margin-top: 1vh; flex-shrink: 0;}
         .setup-box h3 { color: white; text-align: center; margin-bottom: 30px; font-size: 22px; letter-spacing: 1px; font-weight: 700;}
         .input-group { margin-bottom: 22px; }
         .input-group label { display: block; color: #8b949e; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;}
         
-        .profile-input { 
-            width: 100%; 
-            padding: 15px; 
-            border-radius: 12px; 
-            border: 1px solid #30363d; 
-            background: #0d1117; 
-            color: white; 
-            outline: none; 
-            font-size: 15px; 
-            transition: all 0.3s ease;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .profile-input:focus { 
-            border-color: #58a6ff; 
-            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2), inset 0 2px 4px rgba(0,0,0,0.2); 
-        }
+        .profile-input { width: 100%; padding: 15px; border-radius: 12px; border: 1px solid #30363d; background: #0d1117; color: white; outline: none; font-size: 15px; transition: all 0.3s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);}
+        .profile-input:focus { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2), inset 0 2px 4px rgba(0,0,0,0.2); }
         
         .terms-group { display: flex; align-items: flex-start; gap: 12px; margin-top: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px;}
         .terms-group input[type="checkbox"] { width: 20px; height: 20px; margin-top: 1px; accent-color: #58a6ff; cursor: pointer;}
         .terms-group label { color: #8b949e; font-size: 12px; line-height: 1.5; text-transform: none; letter-spacing: normal; font-weight: normal;}
         .terms-link { color: #58a6ff; text-decoration: underline; cursor: pointer; font-weight: bold;}
         
-        #save-profile-btn { 
-            width: 100%; 
-            padding: 16px; 
-            border-radius: 12px; 
-            background: linear-gradient(135deg, #2ea043 0%, #238636 100%); 
-            color: white; 
-            border: none; 
-            font-weight: 800; 
-            font-size: 16px; 
-            transition: all 0.2s ease; 
-            cursor: pointer; 
-            text-transform: uppercase; 
-            letter-spacing: 2px;
-            box-shadow: 0 8px 20px rgba(35, 134, 54, 0.3);
-        }
+        #save-profile-btn { width: 100%; padding: 16px; border-radius: 12px; background: linear-gradient(135deg, #2ea043 0%, #238636 100%); color: white; border: none; font-weight: 800; font-size: 16px; transition: all 0.2s ease; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 8px 20px rgba(35, 134, 54, 0.3);}
         #save-profile-btn:active { background: #2ea043; transform: scale(0.97); box-shadow: 0 4px 10px rgba(35, 134, 54, 0.4);}
         
-        /* SEO ARTICLE (UNTOUCHED) */
-        .seo-article {
-            width: 100%;
-            max-width: 700px;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding: 20px;
-            color: #8b949e;
-            flex-shrink: 0;
-            text-align: left;
-        }
+        .seo-article { width: 100%; max-width: 700px; margin-top: 40px; margin-bottom: 20px; padding: 20px; color: #8b949e; flex-shrink: 0; text-align: left;}
         .seo-article h1, .seo-article h2 { color: #c9d1d9; font-size: 18px; margin-bottom: 12px; font-weight: bold;}
         .seo-article h3 { color: #c9d1d9; font-size: 15px; margin-top: 20px; margin-bottom: 8px;}
         .seo-article p { font-size: 13px; line-height: 1.6; margin-bottom: 15px;}
@@ -318,7 +258,6 @@
         function closeTncModal() { UI.tncModal.style.display = 'none'; }
 
         let myProfile = { name: 'Stranger', gender: 'Unknown' };
-        
         let currentUserState = 'SETUP'; 
         
         function saveProfile() {
@@ -326,10 +265,8 @@
                 alert("⚠️ You must agree to the Platform Rules and confirm you are 18+ to enter.");
                 return; 
             }
-
             let nameVal = UI.userNameInput.value.trim();
             if(nameVal === '') nameVal = 'Stranger';
-            
             myProfile.name = nameVal;
             myProfile.gender = UI.userGenderInput.value;
 
@@ -343,26 +280,20 @@
 
         let typingTimer = null;
         let amITyping = false;
-
         let mediaRecorder;
         let audioChunks = [];
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // 🔥 ENGINE CODE: 100% UNTOUCHED 🔥
-        const TOTAL_SLOTS = 200; 
-        
+        // 🔥 THE NEW DUAL-WAVE TRINITY ENGINE 🔥
         let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        let PRIVATE_TOPIC = `krish_v17_private_${mySessionId}`;
         
-        let all200Slots = [];
-        for(let i = 1; i <= TOTAL_SLOTS; i++) {
-            all200Slots.push(`krish_v17_slot_${i}`);
-        }
-
-        let myPublishSlot = ''; 
-        let magnetPulseTimer = null; 
+        // WAVE 1: GLOBAL SONAR LOBBY
+        const GLOBAL_LOBBY_TOPIC = 'krish_v17_global_sonar_lobby';
+        // WAVE 2: PRIVATE PEER MAGNET 
+        const PRIVATE_TOPIC = `krish_v17_private_${mySessionId}`;
         
+        let globalSonarTimer = null; 
         let mqttClient = null;
         let peerConnection = null;
         let dataChannel = null;
@@ -383,12 +314,13 @@
 
             mqttClient.on('connect', () => {
                 updateStatus(`Welcome, ${myProfile.name}. Ready to connect.`, '#3fb950');
+                // Chupchaap apne private room (Wave 2) me baith jao 
                 mqttClient.subscribe(PRIVATE_TOPIC); 
             });
 
             mqttClient.on('message', async (topic, message) => {
                 const payload = JSON.parse(message.toString());
-                handleSignalingData(payload);
+                handleSignalingData(topic, payload);
             });
             
             mqttClient.on('error', (err) => {
@@ -404,41 +336,51 @@
 
             isSearching = true;
             currentUserState = 'SEARCHING'; 
-            
             UI.findBtn.style.display = 'none';
             UI.chatBox.innerHTML = ''; 
             
-            updateStatus('Searching global network for a match...', '#d29922');
-            printSystemMessage('Deploying secure radar. Looking for strangers in the grid...');
+            updateStatus('Deploying Global Sonar... Scanning world...', '#d29922');
+            printSystemMessage('Dual-Wave Engine Active. Searching for strangers...');
 
-            mqttClient.subscribe(all200Slots);
-            
-            const randomSlotNum = Math.floor(Math.random() * TOTAL_SLOTS) + 1;
-            myPublishSlot = `krish_v17_slot_${randomSlotNum}`;
+            // Step 1: Subscribe to Global Lobby
+            mqttClient.subscribe(GLOBAL_LOBBY_TOPIC, () => {
+                if(!isSearching) return;
+                sendGlobalSonarPulse();
+            });
+        }
 
-            const pulse = JSON.stringify({ type: 'magnet_pulse', senderId: mySessionId });
-            mqttClient.publish(myPublishSlot, pulse);
+        function sendGlobalSonarPulse() {
+            if (!isSearching) return;
+            // Send pulse to the Global Room
+            const pulse = JSON.stringify({ type: 'sonar_pulse', senderId: mySessionId });
+            mqttClient.publish(GLOBAL_LOBBY_TOPIC, pulse);
 
-            clearInterval(magnetPulseTimer);
-            magnetPulseTimer = setInterval(() => {
+            // Repeat sonar every 1.5 seconds if nobody is found yet
+            clearTimeout(globalSonarTimer);
+            globalSonarTimer = setTimeout(() => {
                 if (isSearching) {
-                    mqttClient.publish(myPublishSlot, pulse);
+                    sendGlobalSonarPulse();
                 }
             }, 1500);
         }
 
         function lockEngineAndHideEars() {
             isSearching = false;
-            clearInterval(magnetPulseTimer);
-            mqttClient.unsubscribe(all200Slots);
+            clearTimeout(globalSonarTimer);
+            // Instantly leave the Global Room to hide from Guard (IP ban protection)
+            mqttClient.unsubscribe(GLOBAL_LOBBY_TOPIC);
         }
 
-        async function handleSignalingData(payload) {
-            if (payload.type === 'magnet_pulse' && payload.senderId !== mySessionId && isSearching) {
+        async function handleSignalingData(topic, payload) {
+            
+            // LOGIC 1: TWO STRANGERS MEET IN THE GLOBAL SONAR
+            if (topic === GLOBAL_LOBBY_TOPIC && payload.type === 'sonar_pulse' && payload.senderId !== mySessionId && isSearching) {
+                // Determine who calls who to avoid double calling
                 if (mySessionId > payload.senderId) {
                     lockEngineAndHideEars();
-                    updateStatus('Target acquired! Securing private link...', '#58a6ff');
+                    updateStatus('Stranger locked! Pulling into private slot...', '#58a6ff');
                     
+                    // Directly send Magnet Pull to their Private Room
                     sendSignalingPayload(payload.senderId, { type: 'magnet_pull', senderId: mySessionId });
                     
                     initializeWebRTC(payload.senderId);
@@ -448,17 +390,19 @@
                 }
             }
 
-            if (payload.type === 'magnet_pull' && payload.senderId !== mySessionId && isSearching) {
+            // LOGIC 2: I GOT PULLED INTO A PRIVATE ROOM BY A STRANGER
+            if (topic === PRIVATE_TOPIC && payload.type === 'magnet_pull' && payload.senderId !== mySessionId && isSearching) {
                 lockEngineAndHideEars();
-                updateStatus('Match found! Synchronizing connection...', '#58a6ff');
+                updateStatus('Magnetic Lock Activated! Synchronizing...', '#58a6ff');
                 initializeWebRTC(payload.senderId);
             }
 
-            if (payload.type === 'rtc_offer' && payload.senderId !== mySessionId) {
+            // LOGIC 3: WEBRTC HANDSHAKE IN PRIVATE ROOM
+            if (topic === PRIVATE_TOPIC && payload.type === 'rtc_offer' && payload.senderId !== mySessionId) {
                 if (isSearching) { lockEngineAndHideEars(); }
                 if (!peerConnection) { initializeWebRTC(payload.senderId); }
                 
-                updateStatus('Securing Connection...', '#58a6ff');
+                updateStatus('Securing End-to-End Encryption...', '#58a6ff');
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.offer));
                 
                 const answer = await peerConnection.createAnswer();
@@ -466,15 +410,11 @@
                 sendSignalingPayload(payload.senderId, { type: 'rtc_answer', answer: answer, senderId: mySessionId });
             }
 
-            if (payload.type === 'rtc_answer' && payload.senderId !== mySessionId) {
+            if (topic === PRIVATE_TOPIC && payload.type === 'rtc_answer' && payload.senderId !== mySessionId) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.answer));
             }
 
-            if (payload.type === 'peer_busy') {
-                terminateSession(false, "⚠️ Stranger got connected to someone else. Please click CONNECT TO STRANGER again.");
-            }
-
-            if (payload.type === 'ice_candidate' && payload.senderId !== mySessionId) {
+            if (topic === PRIVATE_TOPIC && payload.type === 'ice_candidate' && payload.senderId !== mySessionId) {
                 try { await peerConnection.addIceCandidate(new RTCIceCandidate(payload.candidate)); } 
                 catch (e) { console.error('ICE Error', e); }
             }
@@ -506,6 +446,7 @@
         }
 
         function sendSignalingPayload(targetId, payloadObj) {
+            // Direct injection to their private room (Wave 2)
             mqttClient.publish(`krish_v17_private_${targetId}`, JSON.stringify(payloadObj));
         }
 
@@ -760,14 +701,12 @@
             }
         }
 
+        // 🔥 PURANA ADMIN PANEL 100% UNTOUCHED 🔥
         const adminSyncClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
         
         adminSyncClient.on('connect', () => {
             setInterval(() => {
-                let activeSlot = '0';
-                if (currentUserState === 'SEARCHING' && myPublishSlot) {
-                    activeSlot = myPublishSlot.split('_').pop();
-                }
+                let activeSlot = isSearching ? 'Global_Sonar_Lobby' : (currentUserState === 'CHATTING' ? 'Private_Secured_Peer' : '0');
                 
                 const payload = {
                     id: mySessionId,
