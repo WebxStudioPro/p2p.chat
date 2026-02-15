@@ -284,22 +284,20 @@
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // 🔥 THE ULTIMATE ANTI-OVERWRITE ENGINE (TARGET LOCK + JITTER) 🔥
-        let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        const GLOBAL_LOBBY_TOPIC = 'krish_v17_global_sonar_lobby';
-        const PRIVATE_TOPIC = `krish_v17_private_${mySessionId}`;
+        // 🔥 THE GRAVITY RADAR & DNA TAGGING ENGINE 🔥
+        let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        let activeTargetId = null; 
+        let isLocked = false;
+        let currentSlotTopic = null;
+        let privateTopic = null;
         
-        let globalSonarTimer = null; 
-        let pullTimeoutTimer = null; 
+        let jumpTimer = null; 
         let webrtcTimeoutTimer = null; 
         
         let mqttClient = null;
         let peerConnection = null;
         let dataChannel = null;
-        
         let isSearching = false; 
-        let isLocked = false; 
-        let activeTargetId = null; // 🔥 NEW: Strict State Monogamy!
 
         const rtcConfiguration = {
             iceServers: [
@@ -316,7 +314,6 @@
 
             mqttClient.on('connect', () => {
                 updateStatus(`Welcome, ${myProfile.name}. Ready to connect.`, '#3fb950');
-                mqttClient.subscribe(PRIVATE_TOPIC); 
             });
 
             mqttClient.on('message', async (topic, message) => {
@@ -337,136 +334,160 @@
 
             isSearching = true;
             isLocked = false; 
-            activeTargetId = null; // Reset Target
-            clearTimeout(pullTimeoutTimer);
+            activeTargetId = null; 
+            clearTimeout(jumpTimer);
             clearTimeout(webrtcTimeoutTimer);
             
             currentUserState = 'SEARCHING'; 
             UI.findBtn.style.display = 'none';
             UI.chatBox.innerHTML = ''; 
             
-            updateStatus('Deploying Global Sonar... Scanning world...', '#d29922');
-            printSystemMessage('Dual-Wave Engine Active. Searching for strangers...');
+            printSystemMessage('DNA Tagging Active. Scanning grid...');
+            jumpToNextSlot();
+        }
 
-            mqttClient.subscribe(GLOBAL_LOBBY_TOPIC, () => {
-                if(!isSearching) return;
-                sendGlobalSonarPulse();
+        function jumpToNextSlot() {
+            if(!isSearching || isLocked) return;
+            
+            if(currentSlotTopic) mqttClient.unsubscribe(currentSlotTopic);
+            
+            // 🔥 THE GRAVITY RADAR: Focus on Slots 1 to 20 to ensure Fast Matching! 🔥
+            let slotNum = Math.floor(Math.random() * 20) + 1; 
+            currentSlotTopic = `krish_v17_slot_${slotNum}`;
+            
+            updateStatus(`Scanning Slot ${slotNum}...`, '#d29922');
+
+            mqttClient.subscribe(currentSlotTopic, () => {
+                if(!isSearching || isLocked) return;
+                const pulse = JSON.stringify({ type: 'wave_pulse', senderId: mySessionId });
+                mqttClient.publish(currentSlotTopic, pulse);
             });
-        }
 
-        function sendGlobalSonarPulse() {
-            if (!isSearching || isLocked) return;
-            const pulse = JSON.stringify({ type: 'sonar_pulse', senderId: mySessionId });
-            mqttClient.publish(GLOBAL_LOBBY_TOPIC, pulse);
-
-            clearTimeout(globalSonarTimer);
-            globalSonarTimer = setTimeout(() => {
-                if (isSearching && !isLocked) {
-                    sendGlobalSonarPulse();
-                }
+            // If no one found, jump again in 1.5s
+            clearTimeout(jumpTimer);
+            jumpTimer = setTimeout(() => {
+                if (isSearching && !isLocked) jumpToNextSlot();
             }, 1500);
-        }
-
-        function lockEngineAndHideEars(targetId) {
-            isLocked = true; 
-            activeTargetId = targetId; // 🔥 LOCK ONTO ONLY THIS TARGET 🔥
-            clearTimeout(globalSonarTimer);
-            mqttClient.unsubscribe(GLOBAL_LOBBY_TOPIC); 
         }
 
         function bounceBackToLobby(reasonMessage) {
             if (!isSearching) return;
-            printSystemMessage(reasonMessage);
+            if (reasonMessage) printSystemMessage(reasonMessage);
             
             if (peerConnection) { peerConnection.close(); peerConnection = null; }
             dataChannel = null;
+            if (privateTopic) mqttClient.unsubscribe(privateTopic);
             
             isLocked = false; 
-            activeTargetId = null; // Release target lock
-            updateStatus('Deploying Global Sonar... Scanning world...', '#d29922');
+            activeTargetId = null; 
             
-            mqttClient.subscribe(GLOBAL_LOBBY_TOPIC, () => {
-                if(isSearching) sendGlobalSonarPulse();
-            });
+            // Re-deploy immediately
+            setTimeout(jumpToNextSlot, 100);
         }
 
         function startWebRTCFailsafe() {
             clearTimeout(webrtcTimeoutTimer);
             webrtcTimeoutTimer = setTimeout(() => {
                 if (isSearching && currentUserState !== 'CHATTING') {
-                    bounceBackToLobby('Network timeout. Bouncing back...');
+                    bounceBackToLobby('Connection timeout. Instant rerouting...');
                 }
-            }, 5000); // 5 seconds for WebRTC exchange
+            }, 4500); 
         }
 
         async function handleSignalingData(topic, payload) {
             
-            // 1. I FOUND SOMEONE IN LOBBY (Added Micro-Jitter to prevent network choke)
-            if (topic === GLOBAL_LOBBY_TOPIC && payload.type === 'sonar_pulse' && payload.senderId !== mySessionId && isSearching && !isLocked) {
-                if (mySessionId > payload.senderId) {
-                    
-                    // Delay slightly so 4 phones don't attack the server in the exact same millisecond
-                    setTimeout(() => {
-                        if (!isSearching || isLocked) return; // In case locked while waiting
-                        
-                        lockEngineAndHideEars(payload.senderId); // Lock memory to this specific stranger
-                        updateStatus('Target found! Knocking on door...', '#58a6ff');
-                        
-                        sendSignalingPayload(payload.senderId, { type: 'magnet_pull', senderId: mySessionId });
-                        
-                        pullTimeoutTimer = setTimeout(() => {
-                            if (isSearching && isLocked && !peerConnection) {
-                                bounceBackToLobby('Stranger door was locked (Busy). Bouncing back...');
-                            }
-                        }, 2000); // Wait 2 seconds max for them to open door
-                    }, Math.floor(Math.random() * 400) + 50); // Random delay 50-450ms
-                }
-            }
-
-            // 2. SOMEONE KNOCKING ON MY PRIVATE DOOR
-            if (topic === PRIVATE_TOPIC && payload.type === 'magnet_pull' && payload.senderId !== mySessionId) {
+            // 1. WE MET IN A SLOT (WAVE PULSE)
+            if (topic === currentSlotTopic && payload.type === 'wave_pulse' && payload.senderId !== mySessionId) {
                 if (isSearching && !isLocked) {
-                    lockEngineAndHideEars(payload.senderId); // Lock memory to them!
-                    updateStatus('Stranger knocking! Opening door...', '#58a6ff');
-                    
-                    sendSignalingPayload(payload.senderId, { type: 'magnet_accept', senderId: mySessionId });
-                    
-                    startWebRTCFailsafe(); 
-                    initializeWebRTC(payload.senderId);
+                    if (mySessionId > payload.senderId) {
+                        // I AM THE INITIATOR - LOCK MY TARGET (DNA)
+                        isLocked = true;
+                        activeTargetId = payload.senderId;
+                        privateTopic = `krish_v17_pvt_${mySessionId}_${activeTargetId}`;
+                        
+                        updateStatus('Target locked! Generating DNA tag...', '#58a6ff');
+                        
+                        // Wait for them in Private Room
+                        mqttClient.subscribe(privateTopic, () => {
+                            mqttClient.publish(currentSlotTopic, JSON.stringify({ 
+                                type: 'magnet_pull', senderId: mySessionId, targetId: activeTargetId, pvtTopic: privateTopic 
+                            }));
+                        });
+                    }
                 }
-                // IF isLocked is TRUE -> IGNORED (Door Closed).
             }
 
-            // 3. TARGET OPENED THEIR DOOR (Must verify Target ID to avoid overwriting!)
-            if (topic === PRIVATE_TOPIC && payload.type === 'magnet_accept' && payload.senderId !== mySessionId && isLocked) {
-                if (activeTargetId === payload.senderId) {
-                    clearTimeout(pullTimeoutTimer); 
-                    updateStatus('Door opened! Securing link...', '#58a6ff');
+            // 2. SOMEONE SENT ME A DNA TAG (PULL)
+            if (topic === currentSlotTopic && payload.type === 'magnet_pull' && payload.targetId === mySessionId) {
+                if (isSearching && !isLocked) {
+                    // I AM FREE! ACCEPT THE TAG!
+                    isLocked = true;
+                    activeTargetId = payload.senderId;
+                    privateTopic = payload.pvtTopic;
                     
-                    startWebRTCFailsafe(); 
-                    initializeWebRTC(payload.senderId);
+                    updateStatus('DNA Matched! Opening secure room...', '#58a6ff');
+                    
+                    mqttClient.subscribe(privateTopic, () => {
+                        mqttClient.publish(privateTopic, JSON.stringify({
+                            type: 'magnet_accept', senderId: mySessionId, targetId: activeTargetId
+                        }));
+                        startWebRTCFailsafe();
+                        initializeWebRTC(activeTargetId);
+                    });
+                } else {
+                    // 🔥 THE INSTANT JHATKA (REPEL) - NO WAITING! 🔥
+                    mqttClient.publish(currentSlotTopic, JSON.stringify({
+                        type: 'magnet_reject', senderId: mySessionId, targetId: payload.senderId
+                    }));
+                }
+            }
+
+            // 3. I GOT REJECTED (INSTANT JHATKA)
+            if (topic === currentSlotTopic && payload.type === 'magnet_reject' && payload.targetId === mySessionId) {
+                if (isLocked && activeTargetId === payload.senderId) {
+                    // Target was busy. Bounce Instantly!
+                    bounceBackToLobby('Target was busy. Scanning next...');
+                }
+            }
+
+            // 4. TARGET ACCEPTED! (IN PRIVATE ROOM)
+            if (topic === privateTopic && payload.type === 'magnet_accept' && payload.targetId === mySessionId) {
+                if (isLocked && activeTargetId === payload.senderId) {
+                    clearTimeout(jumpTimer); 
+                    mqttClient.unsubscribe(currentSlotTopic); // Leave Public Room
+                    
+                    updateStatus('Pairing complete! Securing link...', '#58a6ff');
+                    startWebRTCFailsafe();
+                    initializeWebRTC(activeTargetId);
+                    
                     const offer = await peerConnection.createOffer();
                     await peerConnection.setLocalDescription(offer);
-                    sendSignalingPayload(payload.senderId, { type: 'rtc_offer', offer: offer, senderId: mySessionId });
+                    mqttClient.publish(privateTopic, JSON.stringify({ 
+                        type: 'rtc_offer', offer: offer, senderId: mySessionId, targetId: activeTargetId 
+                    }));
                 }
             }
 
-            // 4. WEBRTC HANDSHAKE (Only process if it's from the Locked Target)
-            if (topic === PRIVATE_TOPIC && payload.type === 'rtc_offer' && payload.senderId !== mySessionId && isLocked && activeTargetId === payload.senderId) {
+            // 5. WEBRTC HANDSHAKE (IN PRIVATE ROOM)
+            if (topic === privateTopic && payload.type === 'rtc_offer' && payload.targetId === mySessionId && isLocked && activeTargetId === payload.senderId) {
+                mqttClient.unsubscribe(currentSlotTopic); // Leave Public Room
                 if (!peerConnection) { initializeWebRTC(payload.senderId); }
+                
                 updateStatus('Securing End-to-End Encryption...', '#58a6ff');
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.offer));
                 
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
-                sendSignalingPayload(payload.senderId, { type: 'rtc_answer', answer: answer, senderId: mySessionId });
+                mqttClient.publish(privateTopic, JSON.stringify({ 
+                    type: 'rtc_answer', answer: answer, senderId: mySessionId, targetId: activeTargetId 
+                }));
             }
 
-            if (topic === PRIVATE_TOPIC && payload.type === 'rtc_answer' && payload.senderId !== mySessionId && isLocked && activeTargetId === payload.senderId) {
+            if (topic === privateTopic && payload.type === 'rtc_answer' && payload.targetId === mySessionId && isLocked && activeTargetId === payload.senderId) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.answer));
             }
 
-            if (topic === PRIVATE_TOPIC && payload.type === 'ice_candidate' && payload.senderId !== mySessionId && isLocked && activeTargetId === payload.senderId) {
+            if (topic === privateTopic && payload.type === 'ice_candidate' && payload.targetId === mySessionId && isLocked && activeTargetId === payload.senderId) {
                 try { await peerConnection.addIceCandidate(new RTCIceCandidate(payload.candidate)); } 
                 catch (e) { console.error('ICE Error', e); }
             }
@@ -486,7 +507,9 @@
 
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    sendSignalingPayload(targetPeerId, { type: 'ice_candidate', candidate: event.candidate, senderId: mySessionId });
+                    mqttClient.publish(privateTopic, JSON.stringify({ 
+                        type: 'ice_candidate', candidate: event.candidate, senderId: mySessionId, targetId: activeTargetId 
+                    }));
                 }
             };
 
@@ -497,14 +520,10 @@
             };
         }
 
-        function sendSignalingPayload(targetId, payloadObj) {
-            mqttClient.publish(`krish_v17_private_${targetId}`, JSON.stringify(payloadObj));
-        }
-
         function setupDataChannelListeners(channel) {
             channel.onopen = () => {
                 clearTimeout(webrtcTimeoutTimer); 
-                isSearching = false; // 🔥 IMPORTANT: Completely stop all bounce timers!
+                isSearching = false; 
                 currentUserState = 'CHATTING'; 
                 UI.inputArea.style.display = 'flex';
                 const introPacket = JSON.stringify({ type: 'intro', profile: myProfile });
@@ -731,12 +750,12 @@
             
             isSearching = false;
             isLocked = false; 
-            activeTargetId = null; // Reset Target Lock
-            clearTimeout(globalSonarTimer);
-            clearTimeout(pullTimeoutTimer);
+            activeTargetId = null; 
+            clearTimeout(jumpTimer);
             clearTimeout(webrtcTimeoutTimer);
             
-            if(mqttClient) mqttClient.unsubscribe(GLOBAL_LOBBY_TOPIC);
+            if(currentSlotTopic) mqttClient.unsubscribe(currentSlotTopic);
+            if(privateTopic) mqttClient.unsubscribe(privateTopic);
             
             clearTimeout(typingTimer);
             amITyping = false;
@@ -767,7 +786,7 @@
         
         adminSyncClient.on('connect', () => {
             setInterval(() => {
-                let activeSlot = isSearching ? 'Global_Sonar_Lobby' : (currentUserState === 'CHATTING' ? 'Private_Secured_Peer' : '0');
+                let activeSlot = isSearching ? currentSlotTopic : (currentUserState === 'CHATTING' ? 'Private_Secured_Peer' : '0');
                 
                 const payload = {
                     id: mySessionId,
