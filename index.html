@@ -284,11 +284,11 @@
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // 🔥 THE "PERSONAL INBOX" MASTER ARCHITECTURE 🔥
+        // 🔥 THE "DEAF MODE" (NO UNSUBSCRIBE) ARCHITECTURE 🔥
         let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
         
         const MAGNET_LOBBY_TOPIC = 'krish_v17_global_magnet_lobby';
-        const MY_INBOX_TOPIC = `krish_v17_inbox_${mySessionId}`; // My permanent personal number!
+        const MY_INBOX_TOPIC = `krish_v17_inbox_${mySessionId}`; 
         
         let lobbyPulseTimer = null; 
         let pullTimeoutTimer = null; 
@@ -318,7 +318,8 @@
             mqttClient.on('connect', () => {
                 updateStatus(`Welcome, ${myProfile.name}. Ready to connect.`, '#3fb950');
                 
-                // 🔥 THE FIX: Subscribe to Personal Inbox IMMEDIATELY and NEVER leave it! 🔥
+                // 🔥 SUBSCRIBE TO EVERYTHING JUST ONCE! WE WILL NEVER UNSUBSCRIBE! 🔥
+                mqttClient.subscribe(MAGNET_LOBBY_TOPIC);
                 mqttClient.subscribe(MY_INBOX_TOPIC); 
             });
 
@@ -353,11 +354,8 @@
             updateStatus('Activating Magnet... Scanning Lobby...', '#d29922');
             printSystemMessage('Magnet Engine Active. Searching for strangers...');
 
-            // Start shouting in the Lobby
-            mqttClient.subscribe(MAGNET_LOBBY_TOPIC, () => {
-                if(!isSearching) return;
-                sendLobbyPulse();
-            });
+            // Start Pulsing
+            sendLobbyPulse();
         }
 
         function sendLobbyPulse() {
@@ -371,7 +369,6 @@
             }, 1500);
         }
 
-        // Helper: Direct Call to someone's Inbox
         function sendToInbox(targetId, payloadObj) {
             mqttClient.publish(`krish_v17_inbox_${targetId}`, JSON.stringify(payloadObj));
         }
@@ -388,10 +385,8 @@
             activeTargetId = null; 
             updateStatus('Activating Magnet... Scanning Lobby...', '#d29922');
             
-            // Re-subscribe to Lobby to find new people
-            mqttClient.subscribe(MAGNET_LOBBY_TOPIC, () => {
-                if(isSearching) sendLobbyPulse();
-            });
+            // Resume pulsing (We never unsubscribed, so we just start talking again)
+            sendLobbyPulse();
         }
 
         function startWebRTCFailsafe() {
@@ -408,8 +403,10 @@
             // ================= 1. RADAR (LOBBY) =================
             if (topic === MAGNET_LOBBY_TOPIC) {
                 
-                // I see someone in the lobby!
-                if (payload.type === 'lobby_pulse' && payload.senderId !== mySessionId && isSearching && !isLocked) {
+                // DEAF MODE: If I am locked or not searching, IGNORE everyone in lobby!
+                if (!isSearching || isLocked) return; 
+                
+                if (payload.type === 'lobby_pulse' && payload.senderId !== mySessionId) {
                     if (mySessionId > payload.senderId) { 
                         // I AM FREE! Lock onto them!
                         isLocked = true;
@@ -420,7 +417,6 @@
                         // Send Direct Pull to THEIR INBOX!
                         sendToInbox(activeTargetId, { type: 'magnet_pull', senderId: mySessionId });
 
-                        // If they don't reply to their inbox in 2.5s, drop it
                         pullTimeoutTimer = setTimeout(() => {
                             if (isSearching && isLocked && !peerConnection) {
                                 bounceBackToLobby('Stranger did not answer. Scanning next...');
@@ -442,13 +438,11 @@
                         
                         updateStatus('Direct Call Accepted! Initiating Link...', '#58a6ff');
                         
-                        // Stop listening to Lobby noise
-                        mqttClient.unsubscribe(MAGNET_LOBBY_TOPIC);
+                        // DEAF MODE is automatically ON because isLocked is now true.
+                        // I am still physically in the Lobby, but I will ignore all lobby messages.
                         
-                        // Send YES to THEIR INBOX
                         sendToInbox(activeTargetId, { type: 'magnet_accept', senderId: mySessionId });
                         
-                        // Since I accepted, I WILL CREATE THE WEBRTC OFFER
                         startWebRTCFailsafe();
                         initializeWebRTC(activeTargetId);
                         const offer = await peerConnection.createOffer();
@@ -456,7 +450,7 @@
                         sendToInbox(activeTargetId, { type: 'rtc_offer', offer: offer, senderId: mySessionId });
 
                     } else {
-                        // 🔥 I AM BUSY! THE INSTANT JHATKA (Direct to their inbox!) 🔥
+                        // 🔥 I AM BUSY! REJECT THEM SO THEY DON'T WAIT! 🔥
                         sendToInbox(payload.senderId, { type: 'magnet_reject', senderId: mySessionId });
                     }
                 }
@@ -464,20 +458,14 @@
                 // My target said YES to my pull!
                 if (payload.type === 'magnet_accept' && isLocked && activeTargetId === payload.senderId) {
                     clearTimeout(pullTimeoutTimer); 
-                    
                     updateStatus('Call Connected! Securing link...', '#58a6ff');
-                    
-                    // Leave Lobby noise
-                    mqttClient.unsubscribe(MAGNET_LOBBY_TOPIC); 
-                    
                     startWebRTCFailsafe();
-                    // Just wait here, they will send the WebRTC rtc_offer next!
                 }
 
                 // My target said NO (Jhatka!)
                 if (payload.type === 'magnet_reject' && isLocked && activeTargetId === payload.senderId) {
                     clearTimeout(pullTimeoutTimer);
-                    bounceBackToLobby(); // Silent instant bounce!
+                    bounceBackToLobby(); // Silent bounce!
                 }
 
                 // ================= 3. WEBRTC HANDSHAKE (VIA INBOX) =================
@@ -767,11 +755,6 @@
             clearTimeout(lobbyPulseTimer);
             clearTimeout(pullTimeoutTimer);
             clearTimeout(webrtcTimeoutTimer);
-            
-            if(mqttClient) {
-                mqttClient.unsubscribe(MAGNET_LOBBY_TOPIC);
-                // We NEVER unsubscribe from MY_INBOX_TOPIC! That's the secret to zero dropped messages!
-            }
             
             clearTimeout(typingTimer);
             amITyping = false;
