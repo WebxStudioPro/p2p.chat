@@ -250,6 +250,22 @@
             micBtn: document.getElementById('mic-btn')
         };
 
+        // 🔥 THE AD MULTIPLIER TRICK (Added Helper Function) 🔥
+        function triggerAdRefresh() {
+            try {
+                // Find old adsterra script and remove it safely
+                const oldScripts = document.querySelectorAll('script[src*="effectivegatecpm.com"]');
+                oldScripts.forEach(script => script.remove());
+                
+                // Inject fresh script to force a new Ad Impression
+                const newScript = document.createElement('script');
+                newScript.type = 'text/javascript';
+                newScript.src = 'https://pl28713238.effectivegatecpm.com/41/29/39/41293924c20c7ebf57324ed041cb2eee.js';
+                newScript.async = true;
+                document.body.appendChild(newScript);
+            } catch(e) {}
+        }
+
         function showExitModal() { UI.exitModal.style.display = 'flex'; }
         function closeModal() { UI.exitModal.style.display = 'none'; }
         function confirmExit() { closeModal(); terminateSession(); }
@@ -284,7 +300,6 @@
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // 🔥 THE "DEAF MODE" (NO UNSUBSCRIBE) ARCHITECTURE 🔥
         let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
         
         const MAGNET_LOBBY_TOPIC = 'krish_v17_global_magnet_lobby';
@@ -294,7 +309,6 @@
         let pullTimeoutTimer = null; 
         let webrtcTimeoutTimer = null;
         
-        // 🔥 SCALABLE MATCHING: Collect peers then randomly pick one 🔥
         let discoveredPeers = [];
         let peerSelectionTimer = null;
         
@@ -338,7 +352,6 @@
             mqttClient.on('connect', () => {
                 updateStatus(`Welcome, ${myProfile.name}. Ready to connect.`, '#3fb950');
                 
-                // 🔥 SUBSCRIBE TO EVERYTHING JUST ONCE! WE WILL NEVER UNSUBSCRIBE! 🔥
                 mqttClient.subscribe(MAGNET_LOBBY_TOPIC);
                 mqttClient.subscribe(MY_INBOX_TOPIC); 
             });
@@ -359,6 +372,9 @@
                 return;
             }
 
+            // 🔥 Multiplier: Connect dabate hi Ad refresh hoga! 🔥
+            triggerAdRefresh();
+
             isSearching = true;
             isLocked = false; 
             activeTargetId = null; 
@@ -377,7 +393,6 @@
             updateStatus('Activating Magnet... Scanning Lobby...', '#d29922');
             printSystemMessage('Magnet Engine Active. Searching for strangers...');
 
-            // Start Pulsing
             sendLobbyPulse();
         }
 
@@ -387,8 +402,7 @@
             mqttClient.publish(MAGNET_LOBBY_TOPIC, pulse);
 
             clearTimeout(lobbyPulseTimer);
-            // 🔥 Add jitter to prevent synchronized pulses 🔥
-            const jitter = 800 + Math.floor(Math.random() * 1200); // 800-2000ms
+            const jitter = 800 + Math.floor(Math.random() * 1200); 
             lobbyPulseTimer = setTimeout(() => {
                 if (isSearching && !isLocked) sendLobbyPulse();
             }, jitter);
@@ -413,7 +427,6 @@
             peerSelectionTimer = null;
             updateStatus('Activating Magnet... Scanning Lobby...', '#d29922');
             
-            // Resume pulsing (We never unsubscribed, so we just start talking again)
             sendLobbyPulse();
         }
 
@@ -428,21 +441,17 @@
 
         async function handleSignalingData(topic, payload) {
             
-            // ================= 1. RADAR (LOBBY) =================
             if (topic === MAGNET_LOBBY_TOPIC) {
                 
-                // DEAF MODE: If I am locked or not searching, IGNORE everyone in lobby!
                 if (!isSearching || isLocked) return; 
                 
                 if (payload.type === 'lobby_pulse' && payload.senderId !== mySessionId) {
-                    // 🔥 SCALABLE: Collect peers, then randomly pick one 🔥
                     if (discoveredPeers.indexOf(payload.senderId) === -1) {
                         discoveredPeers.push(payload.senderId);
                     }
                     
                     if (!peerSelectionTimer) {
-                        // Wait a short random window to collect multiple peers
-                        const waitTime = 200 + Math.floor(Math.random() * 400); // 200-600ms
+                        const waitTime = 200 + Math.floor(Math.random() * 400); 
                         peerSelectionTimer = setTimeout(() => {
                             peerSelectionTimer = null;
                             
@@ -451,7 +460,6 @@
                                 return;
                             }
                             
-                            // Shuffle and find a peer where I should initiate
                             const shuffled = discoveredPeers.sort(() => Math.random() - 0.5);
                             discoveredPeers = [];
                             
@@ -463,7 +471,7 @@
                                 }
                             }
                             
-                            if (!chosenTarget) return; // Other side will initiate
+                            if (!chosenTarget) return; 
                             
                             isLocked = true;
                             activeTargetId = chosenTarget;
@@ -481,20 +489,14 @@
                 }
             }
 
-            // ================= 2. MY PERSONAL INBOX (DIRECT CALLS) =================
             if (topic === MY_INBOX_TOPIC) {
                 
-                // Someone is pulling me!
                 if (payload.type === 'magnet_pull') {
                     if (isSearching && !isLocked) {
-                        // I AM FREE! I say YES and lock them!
                         isLocked = true;
                         activeTargetId = payload.senderId;
                         
                         updateStatus('Direct Call Accepted! Initiating Link...', '#58a6ff');
-                        
-                        // DEAF MODE is automatically ON because isLocked is now true.
-                        // I am still physically in the Lobby, but I will ignore all lobby messages.
                         
                         sendToInbox(activeTargetId, { type: 'magnet_accept', senderId: mySessionId });
                         
@@ -505,27 +507,21 @@
                         sendToInbox(activeTargetId, { type: 'rtc_offer', offer: offer, senderId: mySessionId });
 
                     } else {
-                        // 🔥 I AM BUSY! REJECT THEM SO THEY DON'T WAIT! 🔥
                         sendToInbox(payload.senderId, { type: 'magnet_reject', senderId: mySessionId });
                     }
                 }
 
-                // My target said YES to my pull!
                 if (payload.type === 'magnet_accept' && isLocked && activeTargetId === payload.senderId) {
                     clearTimeout(pullTimeoutTimer); 
                     updateStatus('Call Connected! Securing link...', '#58a6ff');
                     startWebRTCFailsafe();
                 }
 
-                // My target said NO (Jhatka!)
                 if (payload.type === 'magnet_reject' && isLocked && activeTargetId === payload.senderId) {
                     clearTimeout(pullTimeoutTimer);
-                    bounceBackToLobby(); // Silent bounce!
+                    bounceBackToLobby(); 
                 }
-
-                // ================= 3. WEBRTC HANDSHAKE (VIA INBOX) =================
                 
-                // Received Offer
                 if (payload.type === 'rtc_offer' && isLocked && activeTargetId === payload.senderId) {
                     if (!peerConnection) { initializeWebRTC(payload.senderId); }
                     updateStatus('Securing End-to-End Encryption...', '#58a6ff');
@@ -537,12 +533,10 @@
                     sendToInbox(activeTargetId, { type: 'rtc_answer', answer: answer, senderId: mySessionId });
                 }
 
-                // Received Answer
                 if (payload.type === 'rtc_answer' && isLocked && activeTargetId === payload.senderId) {
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.answer));
                 }
 
-                // Received ICE Candidates
                 if (payload.type === 'ice_candidate' && isLocked && activeTargetId === payload.senderId) {
                     try { await peerConnection.addIceCandidate(new RTCIceCandidate(payload.candidate)); } 
                     catch (e) { console.error('ICE Error', e); }
@@ -799,6 +793,10 @@
         }
 
         function terminateSession(isRemoteDisconnect = false, customMessage = null) {
+            
+            // 🔥 Multiplier: Disconnect dabate hi wapas Ad refresh hoga! 🔥
+            triggerAdRefresh();
+
             if (peerConnection) { peerConnection.close(); }
             peerConnection = null; 
             dataChannel = null; 
