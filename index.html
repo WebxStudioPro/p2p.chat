@@ -292,7 +292,27 @@
         
         let lobbyPulseTimer = null; 
         let pullTimeoutTimer = null; 
-        let webrtcTimeoutTimer = null; 
+        let webrtcTimeoutTimer = null;
+        
+        // 🔥 SCALABLE MATCHING: Collect peers then randomly pick one 🔥
+        let discoveredPeers = [];
+        let peerSelectionTimer = null;
+        
+        function pairHash(idA, idB) {
+            const combined = idA < idB ? idA + '|' + idB : idB + '|' + idA;
+            let hash = 0;
+            for (let i = 0; i < combined.length; i++) {
+                hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return hash;
+        }
+        
+        function shouldIInitiate(myId, theirId) {
+            const h = pairHash(myId, theirId);
+            if (h % 2 === 0) return myId > theirId;
+            return myId < theirId;
+        }
         
         let mqttClient = null;
         let peerConnection = null;
@@ -346,6 +366,9 @@
             clearTimeout(lobbyPulseTimer);
             clearTimeout(pullTimeoutTimer);
             clearTimeout(webrtcTimeoutTimer);
+            clearTimeout(peerSelectionTimer);
+            peerSelectionTimer = null;
+            discoveredPeers = [];
             
             currentUserState = 'SEARCHING'; 
             UI.findBtn.style.display = 'none';
@@ -364,9 +387,11 @@
             mqttClient.publish(MAGNET_LOBBY_TOPIC, pulse);
 
             clearTimeout(lobbyPulseTimer);
+            // 🔥 Add jitter to prevent synchronized pulses 🔥
+            const jitter = 800 + Math.floor(Math.random() * 1200); // 800-2000ms
             lobbyPulseTimer = setTimeout(() => {
                 if (isSearching && !isLocked) sendLobbyPulse();
-            }, 1500);
+            }, jitter);
         }
 
         function sendToInbox(targetId, payloadObj) {
@@ -382,7 +407,10 @@
             clearTimeout(webrtcTimeoutTimer);
             
             isLocked = false; 
-            activeTargetId = null; 
+            activeTargetId = null;
+            discoveredPeers = [];
+            clearTimeout(peerSelectionTimer);
+            peerSelectionTimer = null;
             updateStatus('Activating Magnet... Scanning Lobby...', '#d29922');
             
             // Resume pulsing (We never unsubscribed, so we just start talking again)
@@ -407,21 +435,48 @@
                 if (!isSearching || isLocked) return; 
                 
                 if (payload.type === 'lobby_pulse' && payload.senderId !== mySessionId) {
-                    if (mySessionId > payload.senderId) { 
-                        // I AM FREE! Lock onto them!
-                        isLocked = true;
-                        activeTargetId = payload.senderId;
-                        
-                        updateStatus('Target locked! Making Direct Call...', '#58a6ff');
-                        
-                        // Send Direct Pull to THEIR INBOX!
-                        sendToInbox(activeTargetId, { type: 'magnet_pull', senderId: mySessionId });
-
-                        pullTimeoutTimer = setTimeout(() => {
-                            if (isSearching && isLocked && !peerConnection) {
-                                bounceBackToLobby('Stranger did not answer. Scanning next...');
+                    // 🔥 SCALABLE: Collect peers, then randomly pick one 🔥
+                    if (discoveredPeers.indexOf(payload.senderId) === -1) {
+                        discoveredPeers.push(payload.senderId);
+                    }
+                    
+                    if (!peerSelectionTimer) {
+                        // Wait a short random window to collect multiple peers
+                        const waitTime = 200 + Math.floor(Math.random() * 400); // 200-600ms
+                        peerSelectionTimer = setTimeout(() => {
+                            peerSelectionTimer = null;
+                            
+                            if (!isSearching || isLocked || discoveredPeers.length === 0) {
+                                discoveredPeers = [];
+                                return;
                             }
-                        }, 2500);
+                            
+                            // Shuffle and find a peer where I should initiate
+                            const shuffled = discoveredPeers.sort(() => Math.random() - 0.5);
+                            discoveredPeers = [];
+                            
+                            let chosenTarget = null;
+                            for (let i = 0; i < shuffled.length; i++) {
+                                if (shouldIInitiate(mySessionId, shuffled[i])) {
+                                    chosenTarget = shuffled[i];
+                                    break;
+                                }
+                            }
+                            
+                            if (!chosenTarget) return; // Other side will initiate
+                            
+                            isLocked = true;
+                            activeTargetId = chosenTarget;
+                            
+                            updateStatus('Target locked! Making Direct Call...', '#58a6ff');
+                            sendToInbox(activeTargetId, { type: 'magnet_pull', senderId: mySessionId });
+
+                            pullTimeoutTimer = setTimeout(() => {
+                                if (isSearching && isLocked && !peerConnection) {
+                                    bounceBackToLobby('Stranger did not answer. Scanning next...');
+                                }
+                            }, 2500);
+                        }, waitTime);
                     }
                 }
             }
@@ -755,6 +810,9 @@
             clearTimeout(lobbyPulseTimer);
             clearTimeout(pullTimeoutTimer);
             clearTimeout(webrtcTimeoutTimer);
+            clearTimeout(peerSelectionTimer);
+            peerSelectionTimer = null;
+            discoveredPeers = [];
             
             clearTimeout(typingTimer);
             amITyping = false;
