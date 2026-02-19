@@ -26,7 +26,7 @@
         body { background-color: #0d1117; color: #c9d1d9; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
         
         /* 🔥 SPACER FOR ADSTERRA ADS (140px HEIGHT) 🔥 */
-        #ad-spacer { width: 100%; height: 140px; flex-shrink: 0; background: transparent; }
+        #ad-spacer { width: 100%; min-height: 140px; flex-shrink: 0; background: transparent; display: flex; justify-content: center; align-items: center; overflow: hidden;}
 
         #header { padding: 15px; background: rgba(22, 27, 34, 0.95); backdrop-filter: blur(5px); text-align: center; border-bottom: 1px solid #30363d; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 10; min-height: 70px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.3s ease;}
         
@@ -123,7 +123,10 @@
 </head>
 <body>
 
-    <div id="ad-spacer"></div>
+    <div id="ad-spacer">
+        <script async="async" data-cfasync="false" src="https://pl28743999.effectivegatecpm.com/f0e4e82ffb718c35b87644553bcf64f1/invoke.js"></script>
+        <div id="container-f0e4e82ffb718c35b87644553bcf64f1"></div>
+    </div>
 
     <div id="header">
         <div id="default-header">
@@ -235,13 +238,14 @@
 
     <script>
         /* ═══════════════════════════════════════════════════════════════════
-         * v5.1 "TRIPLE SNIPER" + DE-DUPLICATOR SHIELD
+         * v5.1 "TRIPLE SNIPER" + DE-DUPLICATOR SHIELD + NATIVE ADS
          * ─────────────────────────────────────────────────────────────────
          * STRATEGY:
          * - 3 FREE permanent public MQTT brokers simultaneously (HiveMQ + EMQX + Mosquitto)
          * - NO SLOT SYSTEM — Global lobby channel, unlimited users, zero collision
          * - Pulse: 150ms (10x faster than before, load distributed across 3 brokers)
          * - De-Duplicator: Blocks "Echo" crashes caused by receiving same signal 3 times.
+         * - Ads: Native Banner Refresh Logic (10s Anti-Ban Shield)
          * ═══════════════════════════════════════════════════════════════════ */
 
         const UI = {
@@ -271,14 +275,25 @@
             const now = Date.now();
             if (now - lastAdRefreshTime < 10000) return;
             lastAdRefreshTime = now;
+            
+            // 🔥 NEW NATIVE BANNER REFRESH LOGIC 🔥
             try {
-                const oldScripts = document.querySelectorAll('script[src*="effectivegatecpm.com"]');
-                oldScripts.forEach(script => script.remove());
-                const newScript = document.createElement('script');
-                newScript.type = 'text/javascript';
-                newScript.src = 'https://pl28713238.effectivegatecpm.com/41/29/39/41293924c20c7ebf57324ed041cb2eee.js';
-                newScript.async = true;
-                document.body.appendChild(newScript);
+                const spacer = document.getElementById('ad-spacer');
+                if(spacer) {
+                    spacer.innerHTML = ''; // Clear old ad
+                    
+                    // Re-inject the Container
+                    const newDiv = document.createElement('div');
+                    newDiv.id = 'container-f0e4e82ffb718c35b87644553bcf64f1';
+                    spacer.appendChild(newDiv);
+
+                    // Re-inject the Script
+                    const newScript = document.createElement('script');
+                    newScript.async = true;
+                    newScript.setAttribute('data-cfasync', 'false');
+                    newScript.src = 'https://pl28743999.effectivegatecpm.com/f0e4e82ffb718c35b87644553bcf64f1/invoke.js';
+                    spacer.appendChild(newScript);
+                }
             } catch(e) {}
         }
 
@@ -594,10 +609,8 @@
                         sendToInbox(activeTargetId, { type: 'rtc_offer', offer: offer, senderId: mySessionId });
 
                     } else if (isLocked && activeTargetId === payload.senderId) {
-                        // 🔥 FIX 1: THE DE-DUPLICATOR SHIELD (Ignore duplicate calls from the same person)
                         return;
                     } else {
-                        // Reject calls from *other* people while we are busy
                         sendToInbox(payload.senderId, { type: 'magnet_reject', senderId: mySessionId });
                     }
                 }
@@ -615,7 +628,6 @@
                 }
                 
                 if (payload.type === 'rtc_offer' && isLocked && activeTargetId === payload.senderId) {
-                    // 🔥 FIX 2: IGNORE DUPLICATE OFFERS (Prevents WebRTC InvalidStateError Crash)
                     if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) return;
 
                     if (!peerConnection) { initializeWebRTC(payload.senderId); }
@@ -629,7 +641,6 @@
                 }
 
                 if (payload.type === 'rtc_answer' && isLocked && activeTargetId === payload.senderId) {
-                    // 🔥 FIX 3: IGNORE DUPLICATE ANSWERS
                     if (peerConnection && peerConnection.currentRemoteDescription) return;
 
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.answer));
@@ -982,7 +993,5 @@
             }, 2000);
         });
     </script>
-    
-    <script type="text/javascript" src="https://pl28713238.effectivegatecpm.com/41/29/39/41293924c20c7ebf57324ed041cb2eee.js" async></script>
 </body>
 </html>
