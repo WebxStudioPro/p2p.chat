@@ -17,8 +17,6 @@
     <meta property="og:url" content="https://p2p-chat-eta.vercel.app">
 
     <link rel="icon" type="image/png" href="favicon.png">
-    
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; }
@@ -237,9 +235,8 @@
     </div>
 
     <script>
-        /* ═══════════════════════════════════════════════════════════════════
-         * CTO ARCHITECTURE: 🚀 SINGLE EMQX (NO FIREBASE) + JITTER PULSE
-         * ═══════════════════════════════════════════════════════════════════ */
+        // 🚀 CUSTOM RENDER WEBSOCKET ENGINE (No MQTT/Broker garbage)
+        const SERVER_URL = 'wss://p2p-chat-server-54to.onrender.com';
 
         const UI = {
             defaultHeader: document.getElementById('default-header'),
@@ -258,11 +255,20 @@
             userGenderInput: document.getElementById('user-gender'),
             exitModal: document.getElementById('exit-modal-overlay'),
             tncModal: document.getElementById('tnc-modal-overlay'),
-            termsCheckbox: document.getElementById('terms-checkbox')
+            termsCheckbox: document.getElementById('terms-checkbox'),
+            micBtn: document.getElementById('mic-btn')
         };
 
-        // UI & Ads logic
+        // UI & Modal Functions
+        function showExitModal() { UI.exitModal.style.display = 'flex'; }
+        function closeModal() { UI.exitModal.style.display = 'none'; }
+        function confirmExit() { closeModal(); terminateSession(); }
+        function showTncModal() { UI.tncModal.style.display = 'flex'; }
+        function closeTncModal() { UI.tncModal.style.display = 'none'; }
+
+        // Adsterra Refresh Logic
         let lastAdRefreshTime = 0;
+        let adRefreshInterval = null;
         function triggerAdRefresh() {
             const now = Date.now();
             if (now - lastAdRefreshTime < 10000) return;
@@ -283,15 +289,12 @@
             } catch(e) {}
         }
 
-        function showExitModal() { UI.exitModal.style.display = 'flex'; }
-        function closeModal() { UI.exitModal.style.display = 'none'; }
-        function confirmExit() { closeModal(); terminateSession(); }
-        function showTncModal() { UI.tncModal.style.display = 'flex'; }
-        function closeTncModal() { UI.tncModal.style.display = 'none'; }
-
+        let ws = null;
+        let peerConnection = null;
+        let dataChannel = null;
         let myProfile = { name: 'Stranger', gender: 'Unknown' };
-        let currentUserState = 'SETUP';
-        let adRefreshInterval = null;
+        let isSearching = false;
+
         let typingTimer = null;
         let amITyping = false;
         let mediaRecorder;
@@ -299,313 +302,148 @@
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        // Core variables
-        let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-        let isSearching = false;
-        let isLocked = false;
-        let activeTargetId = null;
-        
-        let peerConnection = null;
-        let dataChannel = null;
-        let webrtcTimeoutTimer = null;
-        let lobbyPulseTimer = null;
-        let connectionRetryTimer = null;
-        let pendingIce = [];
-
-        // Single Dedicated Server Topic Names
-        const MY_INBOX_TOPIC = `krish_v18_inbox_${mySessionId}`;
-        const GLOBAL_LOBBY_TOPIC = 'krish_v18_global_lobby';
-
-        // 🟢 THE SINGLE EMQX BROKER CONNECTION (No Firebase, No Triple Brokers)
-        const signalingClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
-            clientId: mySessionId + '_main',
-            clean: true,
-            connectTimeout: 8000,
-            reconnectPeriod: 2000,
-        });
-
-        signalingClient.on('connect', () => {
-            signalingClient.subscribe(MY_INBOX_TOPIC, { qos: 0 });
-            if (currentUserState === 'SETUP') {
-                updateStatus('System Online. Ready to connect.', '#3fb950');
-            }
-        });
-
-        // 🛡️ DEDUPLICATION (Jitter ke bawajood 1 hi message pick ho)
-        const seenMsgIds = new Map();
-        function isDuplicateMsgId(msgId) {
-            if (!msgId) return false;
-            if (seenMsgIds.has(msgId)) return true;
-            seenMsgIds.set(msgId, Date.now());
-            if (seenMsgIds.size > 1000) seenMsgIds.delete(seenMsgIds.keys().next().value);
-            return false;
-        }
-
-        signalingClient.on('message', (topic, message) => {
-            try {
-                const payload = JSON.parse(message.toString());
-                if (payload.msgId && isDuplicateMsgId(payload.msgId)) return;
-                handleSignalingData(topic, payload);
-            } catch(e) {}
-        });
-
         const rtcConfiguration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun.cloudflare.com:3478' }
+                { urls: 'stun:stun2.l.google.com:19302' }
             ]
         };
-
-        function pairHash(idA, idB) {
-            const combined = idA < idB ? idA + '|' + idB : idB + '|' + idA;
-            let hash = 5381;
-            for (let i = 0; i < combined.length; i++) {
-                hash = ((hash << 5) + hash + combined.charCodeAt(i)) & 0x7FFFFFFF;
-            }
-            return hash;
-        }
-
-        function shouldIInitiate(myId, theirId) {
-            const bit0 = pairHash(myId, theirId) & 1;
-            const lexOrder = myId < theirId ? 0 : 1;
-            return (bit0 ^ lexOrder) === 1;
-        }
-
-        function sendToInbox(targetId, payload) {
-            payload.msgId = Math.random().toString(36).substring(2, 10);
-            signalingClient.publish(`krish_v18_inbox_${targetId}`, JSON.stringify(payload), { qos: 0 });
-        }
 
         function saveProfile() {
             if (!UI.termsCheckbox.checked) {
                 alert("⚠️ You must agree to the Platform Rules and confirm you are 18+ to enter.");
                 return;
             }
-            if (!signalingClient.connected) {
-                alert("Connecting to server... please wait 1 second.");
-                return;
-            }
-            let nameVal = UI.userNameInput.value.trim();
-            if(nameVal === '') nameVal = 'Stranger';
-            myProfile.name = nameVal;
+            myProfile.name = UI.userNameInput.value.trim() || 'Stranger';
             myProfile.gender = UI.userGenderInput.value;
 
             UI.setupContainer.style.display = 'none';
             UI.chatBox.style.display = 'flex';
             UI.actionArea.style.display = 'flex';
             
-            currentUserState = 'LOBBY';
-            triggerAdRefresh();
+            updateStatus('Connecting to Global Server...', '#d29922');
+
+            // Connect to Render WebSocket
+            ws = new WebSocket(SERVER_URL);
+            
+            ws.onopen = () => {
+                updateStatus(`Welcome, ${myProfile.name}. Ready to connect.`, '#3fb950');
+                triggerAdRefresh();
+            };
+
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'matched') {
+                    isSearching = false;
+                    updateStatus('Stranger Found! Linking P2P...', '#58a6ff');
+                    setupWebRTC(data.role === 'initiator');
+                } 
+                else if (data.type === 'offer') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
+                } 
+                else if (data.type === 'answer') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
+                } 
+                else if (data.type === 'ice_candidate') {
+                    peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } 
+                else if (data.type === 'partner_left') {
+                    terminateSession(true);
+                }
+            };
+
+            ws.onerror = () => {
+                updateStatus('Server Error! Check connection.', '#da3633');
+            };
+            
+            ws.onclose = () => {
+                updateStatus('Disconnected from Server.', '#da3633');
+            };
         }
 
-        // ==============================================================
-        // 🚀 THE SILENT SNIPER (JITTER PULSE) MATCHMAKING
-        // ==============================================================
         function initiateMatchmaking() {
-            if (!signalingClient.connected) {
-                updateStatus('Connecting to server...', '#d29922');
-                setTimeout(initiateMatchmaking, 1000);
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert("Network is connecting. Please wait a second.");
                 return;
             }
-            triggerAdRefresh();
-            cleanupWebRTC();
-
+            
             isSearching = true;
-            isLocked = false;
-            activeTargetId = null;
-            pendingIce = [];
-            currentUserState = 'SEARCHING';
             UI.findBtn.style.display = 'none';
             UI.chatBox.innerHTML = '';
             
-            updateStatus('⚡ Scanning global radar...', '#d29922');
-            printSystemMessage('Searching for a stranger...');
-
-            signalingClient.subscribe(GLOBAL_LOBBY_TOPIC, { qos: 0 });
-            fireJitterPulse();
-        }
-
-        // 🎲 Jitter Pulse: Har 1 to 2.5 second ke beech random time par signal bhejega
-        // Taaki 6 phone exact ek sath na bajein!
-        function fireJitterPulse() {
-            if (!isSearching || isLocked) return;
+            updateStatus('⚡ Activating Global Radar... Scanning...', '#d29922');
+            printSystemMessage('Finding strangers...');
             
-            signalingClient.publish(GLOBAL_LOBBY_TOPIC, JSON.stringify({
-                type: 'lobby_presence',
-                senderId: mySessionId,
-                msgId: Math.random().toString(36).substring(2, 10)
-            }), { qos: 0 });
-
-            const randomDelay = 1000 + Math.floor(Math.random() * 1500); 
-            clearTimeout(lobbyPulseTimer);
-            lobbyPulseTimer = setTimeout(fireJitterPulse, randomDelay);
+            ws.send(JSON.stringify({ type: 'find_stranger' }));
+            triggerAdRefresh();
         }
 
-        async function handleSignalingData(topic, payload) {
-            // 1. RADAR LOBBY
-            if (topic === GLOBAL_LOBBY_TOPIC) {
-                if (!isSearching || isLocked) return;
-                if (payload.type !== 'lobby_presence' || payload.senderId === mySessionId) return;
-                
-                if (shouldIInitiate(mySessionId, payload.senderId)) {
-                    // I am the Boss. Lock onto this target!
-                    isLocked = true;
-                    activeTargetId = payload.senderId;
-                    
-                    clearTimeout(lobbyPulseTimer);
-                    signalingClient.unsubscribe(GLOBAL_LOBBY_TOPIC); // Drop out of radar
-                    
-                    updateStatus('🎯 Target locked! Sending Request...', '#58a6ff');
-                    
-                    // Drop a PULL to their inbox
-                    sendToInbox(activeTargetId, { type: 'magnet_pull', from: mySessionId });
-                    
-                    // If target doesn't answer in 4s, bounce back
-                    clearTimeout(connectionRetryTimer);
-                    connectionRetryTimer = setTimeout(() => bounceBack('Stranger did not respond. Scanning next...'), 4000);
-                }
-            }
-
-            // 2. PRIVATE INBOX
-            if (topic === MY_INBOX_TOPIC) {
-                // Someone (Boss) wants to connect with me
-                if (payload.type === 'magnet_pull' && isSearching && !isLocked) {
-                    isLocked = true;
-                    activeTargetId = payload.from;
-                    
-                    clearTimeout(lobbyPulseTimer);
-                    signalingClient.unsubscribe(GLOBAL_LOBBY_TOPIC); // Drop out of radar
-                    
-                    updateStatus('📞 Call received! Answering...', '#58a6ff');
-                    
-                    // Accept the call
-                    sendToInbox(activeTargetId, { type: 'magnet_accept', from: mySessionId });
-                    
-                    startWebRTC(false); // Wait for offer
-                }
-                
-                // If I am locked but someone ELSE tries to pull me, reject them
-                else if (payload.type === 'magnet_pull' && isLocked && activeTargetId !== payload.from) {
-                    sendToInbox(payload.from, { type: 'magnet_reject', from: mySessionId });
-                }
-
-                // Target Accepted my call!
-                if (payload.type === 'magnet_accept' && isLocked && activeTargetId === payload.from) {
-                    clearTimeout(connectionRetryTimer);
-                    updateStatus('🔗 Secure Link Accepted! Creating Offer...', '#58a6ff');
-                    startWebRTC(true); // Create offer
-                }
-
-                // Target Rejected my call
-                if (payload.type === 'magnet_reject' && isLocked && activeTargetId === payload.from) {
-                    clearTimeout(connectionRetryTimer);
-                    bounceBack('Target is busy. Scanning next...');
-                }
-
-                // --- WEBRTC SIGNALING DATA ---
-                if (payload.type === 'rtc_offer' && isLocked && activeTargetId === payload.from) {
-                    if (!peerConnection) startWebRTC(false);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    sendToInbox(activeTargetId, { type: 'rtc_answer', answer: answer, from: mySessionId });
-                    
-                    // Process cached ICE candidates
-                    pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
-                    pendingIce = [];
-                }
-
-                if (payload.type === 'rtc_answer' && isLocked && activeTargetId === payload.from) {
-                    if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.answer));
-                        pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
-                        pendingIce = [];
-                    }
-                }
-
-                if (payload.type === 'ice_candidate' && isLocked && activeTargetId === payload.from) {
-                    const c = new RTCIceCandidate(payload.candidate);
-                    if (peerConnection && peerConnection.remoteDescription) {
-                        peerConnection.addIceCandidate(c).catch(e=>{});
-                    } else {
-                        pendingIce.push(c);
-                    }
-                }
-            }
-        }
-
-        async function startWebRTC(isInitiator) {
+        function setupWebRTC(isInitiator) {
+            if (peerConnection) peerConnection.close();
             peerConnection = new RTCPeerConnection(rtcConfiguration);
 
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate && activeTargetId) {
-                    sendToInbox(activeTargetId, { type: 'ice_candidate', candidate: e.candidate, from: mySessionId });
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: 'ice_candidate', candidate: event.candidate }));
                 }
             };
 
             peerConnection.oniceconnectionstatechange = () => {
-                if (!peerConnection) return;
-                const state = peerConnection.iceConnectionState;
-                if (state === 'connected' || state === 'completed') {
-                    clearTimeout(webrtcTimeoutTimer);
-                } else if (state === 'failed' || state === 'disconnected') {
-                    setTimeout(() => {
-                        if (peerConnection && (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected')) {
-                            terminateSession(true);
-                        }
-                    }, 2000);
+                if (peerConnection && (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed')) {
+                    terminateSession(true);
                 }
             };
 
             if (isInitiator) {
-                dataChannel = peerConnection.createDataChannel('chat');
-                setupDataChannel(dataChannel);
+                dataChannel = peerConnection.createDataChannel('chat_channel');
+                setupDataChannelListeners(dataChannel);
 
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                sendToInbox(activeTargetId, { type: 'rtc_offer', offer: offer, from: mySessionId });
-                
-                webrtcTimeoutTimer = setTimeout(() => {
-                    if (isSearching) bounceBack('Connection timed out. Retrying...');
-                }, 8000);
+                peerConnection.createOffer().then(offer => {
+                    peerConnection.setLocalDescription(offer);
+                    ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+                });
             } else {
-                peerConnection.ondatachannel = (e) => {
-                    dataChannel = e.channel;
-                    setupDataChannel(dataChannel);
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannelListeners(dataChannel);
                 };
             }
         }
 
-        function setupDataChannel(channel) {
+        function setupDataChannelListeners(channel) {
             channel.onopen = () => {
-                clearTimeout(webrtcTimeoutTimer);
-                clearTimeout(connectionRetryTimer);
-                isSearching = false;
-                currentUserState = 'CHATTING';
                 UI.inputArea.style.display = 'flex';
-                
-                try { signalingClient.unsubscribe(GLOBAL_LOBBY_TOPIC); } catch(e){}
-                
                 const introPacket = JSON.stringify({ type: 'intro', profile: myProfile });
                 dataChannel.send(introPacket);
 
                 clearInterval(adRefreshInterval);
-                adRefreshInterval = setInterval(() => triggerAdRefresh(), 60000);
+                adRefreshInterval = setInterval(() => {
+                    triggerAdRefresh();
+                }, 60000);
             };
 
             channel.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    
                     if (data.type === 'intro') {
                         UI.defaultHeader.style.display = 'none';
                         UI.chatHeader.style.display = 'flex';
                         UI.topName.innerText = data.profile.name;
                         UI.topGender.innerText = data.profile.gender;
                         
-                        if(data.profile.gender === 'Female') UI.topGender.className = 'gender-female';
-                        else if(data.profile.gender === 'Other') UI.topGender.className = 'gender-other';
-                        else UI.topGender.className = 'gender-male';
+                        if(data.profile.gender === 'Female') {
+                            UI.topGender.className = 'gender-female';
+                        } else if(data.profile.gender === 'Other') {
+                            UI.topGender.className = 'gender-other';
+                        } else {
+                            UI.topGender.className = 'gender-male';
+                        }
                         
                         printSystemMessage(`You are chatting securely with ${data.profile.name}. Say Hi!`);
                     }
@@ -624,41 +462,15 @@
                     else if (data.type === 'typing') {
                         UI.typingIndicator.style.display = data.status ? 'inline-block' : 'none';
                     }
-                } catch(e) { renderMessage(event.data, 'stranger', 'text'); }
+                } catch(e) {
+                    renderMessage(event.data, 'stranger', 'text');
+                }
             };
+
             channel.onclose = () => terminateSession(true);
         }
 
-        function bounceBack(msg) {
-            if (!isSearching && !isLocked) return;
-            if (msg) printSystemMessage(msg);
-            cleanupWebRTC();
-            
-            isLocked = false;
-            activeTargetId = null;
-            pendingIce = [];
-            
-            updateStatus('⚡ Rescanning global radar...', '#d29922');
-            
-            // Re-subscribe to lobby and fire pulse again
-            setTimeout(() => {
-                if (isSearching && !isLocked) {
-                    try { signalingClient.subscribe(GLOBAL_LOBBY_TOPIC, { qos: 0 }); } catch(e){}
-                    fireJitterPulse();
-                }
-            }, 1000);
-        }
-
-        function cleanupWebRTC() {
-            if (peerConnection) { peerConnection.close(); peerConnection = null; }
-            dataChannel = null;
-            clearTimeout(webrtcTimeoutTimer);
-            clearTimeout(lobbyPulseTimer);
-            clearTimeout(connectionRetryTimer);
-            pendingIce = [];
-            try { signalingClient.unsubscribe(GLOBAL_LOBBY_TOPIC); } catch(e){}
-        }
-
+        // Typing & Messaging Logic
         function handleTypingEvent() {
             if (!dataChannel || dataChannel.readyState !== 'open') return;
             if (!amITyping) {
@@ -675,18 +487,27 @@
         function sendDataChannelMessage() {
             const text = UI.msgInput.value.trim();
             if (text === '' || !dataChannel || dataChannel.readyState !== 'open') return;
+
             const msgPacket = JSON.stringify({ type: 'chat', content: text, profile: myProfile });
             dataChannel.send(msgPacket);
+            
             amITyping = false;
             clearTimeout(typingTimer);
             dataChannel.send(JSON.stringify({ type: 'typing', status: false }));
+
             renderMessage(text, 'mine', 'text');
             UI.msgInput.value = '';
         }
 
+        function handleKeypress(e) {
+            if (e.key === 'Enter') sendDataChannelMessage();
+        }
+
+        // Image Handling
         function handleImageSelection(event) {
             const file = event.target.files[0];
             if (!file || !dataChannel || dataChannel.readyState !== 'open') return;
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const img = new Image();
@@ -697,8 +518,10 @@
                     const scaleSize = MAX_WIDTH / img.width;
                     canvas.width = MAX_WIDTH;
                     canvas.height = img.height * scaleSize;
+                    
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
                     const base64Img = canvas.toDataURL('image/jpeg', 0.5);
                     dataChannel.send(JSON.stringify({ type: 'image', content: base64Img, profile: myProfile }));
                     renderMessage(base64Img, 'mine', 'image');
@@ -707,18 +530,23 @@
             reader.readAsDataURL(file);
         }
 
+        // Audio Handling
         async function startAudioRecordingUI() {
             if (!dataChannel || dataChannel.readyState !== 'open') return;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
-                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
 
                 document.getElementById('photo-btn').style.display = 'none';
                 document.getElementById('mic-btn').style.display = 'none';
                 document.getElementById('msg-input').style.display = 'none';
                 document.getElementById('send-btn').style.display = 'none';
+
                 document.getElementById('cancel-audio-btn').style.display = 'flex';
                 document.getElementById('recording-timer-display').style.display = 'block';
                 document.getElementById('send-audio-btn').style.display = 'flex';
@@ -733,7 +561,9 @@
                 }, 1000);
 
                 mediaRecorder.start();
-            } catch (err) { alert("Please allow Microphone access to send voice notes!"); }
+            } catch (err) {
+                alert("Please allow Microphone access to send voice notes!");
+            }
         }
 
         function cancelAudioRecording() {
@@ -765,9 +595,11 @@
 
         function resetAudioUI() {
             clearInterval(recordTimerInterval);
+            
             document.getElementById('cancel-audio-btn').style.display = 'none';
             document.getElementById('recording-timer-display').style.display = 'none';
             document.getElementById('send-audio-btn').style.display = 'none';
+
             document.getElementById('photo-btn').style.display = 'flex';
             document.getElementById('mic-btn').style.display = 'flex';
             document.getElementById('msg-input').style.display = '';
@@ -777,8 +609,10 @@
         function renderMessage(content, type, msgFormat = 'text') {
             const wrapper = document.createElement('div');
             wrapper.className = `message ${type === 'mine' ? 'my-message' : 'stranger-message'}`;
-            if (msgFormat === 'text') wrapper.innerText = content;
-            else if (msgFormat === 'image') {
+            
+            if (msgFormat === 'text') {
+                wrapper.innerText = content;
+            } else if (msgFormat === 'image') {
                 const img = document.createElement('img');
                 img.src = content;
                 img.className = 'chat-img';
@@ -790,6 +624,7 @@
                 audio.className = 'chat-audio';
                 wrapper.appendChild(audio);
             }
+            
             UI.chatBox.appendChild(wrapper);
             UI.chatBox.scrollTop = UI.chatBox.scrollHeight;
         }
@@ -803,45 +638,37 @@
         }
 
         function updateStatus(text, color) { UI.status.innerText = text; UI.status.style.color = color; }
-        
-        function handleKeypress(e) { if (e.key === 'Enter') sendDataChannelMessage(); }
 
-        function terminateSession(isRemoteDisconnect = false, customMessage = null) {
+        function terminateSession(isRemoteDisconnect = false) {
             clearInterval(adRefreshInterval);
+            adRefreshInterval = null;
             triggerAdRefresh();
-            cleanupWebRTC();
-            
+
+            if (peerConnection) { peerConnection.close(); }
+            peerConnection = null;
+            dataChannel = null;
             isSearching = false;
-            isLocked = false;
-            activeTargetId = null;
+            
             clearTimeout(typingTimer);
             amITyping = false;
             cancelAudioRecording();
-            
-            currentUserState = 'LOBBY';
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'leave' }));
+            }
+
             UI.chatHeader.style.display = 'none';
             UI.typingIndicator.style.display = 'none';
             UI.defaultHeader.style.display = 'block';
+
             UI.inputArea.style.display = 'none';
             UI.findBtn.style.display = 'block';
             updateStatus('Disconnected.', '#da3633');
+            
             UI.chatBox.innerHTML = '';
             
-            if (customMessage) printSystemMessage(customMessage);
-            else printSystemMessage(isRemoteDisconnect ? 'Stranger has disconnected. Memory cleared.' : 'You left the chat. Memory cleared.');
+            printSystemMessage(isRemoteDisconnect ? 'Stranger has disconnected. Memory cleared.' : 'You left the chat. Memory cleared.');
         }
-
-        // ═══════════════════════════════════════════════════════════════════
-        // 📊 ADMIN SYNC — EMQX Unchanged (Seperate Client)
-        // ═══════════════════════════════════════════════════════════════════
-        const adminSyncClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-        adminSyncClient.on('connect', () => {
-            setInterval(() => {
-                let activeSlot = isSearching ? 'GlobalLobby_Scanning' : (currentUserState === 'CHATTING' ? 'Private_Secured_Peer' : '0');
-                const payload = { id: mySessionId, state: currentUserState, slot: activeSlot };
-                adminSyncClient.publish('krish_v17_admin_radar_sync', JSON.stringify(payload));
-            }, 2000);
-        });
     </script>
 </body>
 </html>
