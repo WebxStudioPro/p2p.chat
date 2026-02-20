@@ -241,7 +241,7 @@
 
     <script>
         /* ═══════════════════════════════════════════════════════════════════
-         * CTO ARCHITECTURE: THE "1-STEP ZERO BULLSHIT" FIREBASE ENGINE
+         * CTO FINAL FIX: THE "ATOMIC QUEUE" ARCHITECTURE (100% COLLISION FREE)
          * ═══════════════════════════════════════════════════════════════════ */
 
         const UI = {
@@ -277,7 +277,10 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        // ========== AD REFRESH ==========
+        database.ref('.info/connected').on('value', function(snap) {
+            if (snap.val() === true) console.log("Firebase Connected!");
+        });
+
         let lastAdRefreshTime = 0;
         function triggerAdRefresh() {
             const now = Date.now();
@@ -325,7 +328,7 @@
             
             currentUserState = 'LOBBY';
             triggerAdRefresh();
-            updateStatus('Ready to find strangers!', '#3fb950');
+            updateStatus('Ready to chat!', '#3fb950');
         }
 
         let typingTimer = null;
@@ -343,7 +346,6 @@
         let currentRoomRef = null;
         let pendingIce = [];
 
-        // Simple Google STUN Servers (100% Reliable)
         const rtcConfiguration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -353,105 +355,81 @@
             ]
         };
 
-        // BOSS ALGORITHM
-        function pairHash(idA, idB) {
-            const combined = idA < idB ? idA + '|' + idB : idB + '|' + idA;
-            let hash = 5381;
-            for (let i = 0; i < combined.length; i++) {
-                hash = ((hash << 5) + hash + combined.charCodeAt(i)) & 0x7FFFFFFF;
-            }
-            return hash;
-        }
-
-        function shouldIInitiate(myId, theirId) {
-            const bit0 = pairHash(myId, theirId) & 1;
-            const lexOrder = myId < theirId ? 0 : 1;
-            return (bit0 ^ lexOrder) === 1;
-        }
-
         // ==============================================================
-        // CORE MATCHMAKING LOGIC (1-STEP PROCESS)
+        // 🚀 THE ATOMIC QUEUE (100% COLLISION FREE FOR HIGH TRAFFIC)
         // ==============================================================
         function initiateMatchmaking() {
             triggerAdRefresh();
-            cleanupAll(); // Destroy old sessions completely
+            cleanupAll(); 
 
             isSearching = true;
             currentUserState = 'SEARCHING';
             UI.findBtn.style.display = 'none';
             UI.chatBox.innerHTML = '';
             
-            updateStatus('⚡ Scanning global network...', '#d29922');
-            printSystemMessage('Looking for a stranger...');
+            updateStatus('⚡ Connecting to global queue...', '#d29922');
+            printSystemMessage('Searching for a stranger...');
 
-            // 1. Put myself in the lobby
-            database.ref('lobby/' + mySessionId).set({ ts: Date.now() });
-            database.ref('lobby/' + mySessionId).onDisconnect().remove();
+            let matchedPeer = null;
 
-            // 2. I am the TARGET: Wait for Boss to send me a Room ID
-            database.ref('inbox/' + mySessionId).on('child_added', (snapshot) => {
-                const data = snapshot.val();
-                snapshot.ref.remove().catch(e=>{}); // Clear message instantly
-
-                if (data && data.roomId && isSearching) {
-                    lockAndPrepare(); // Lock my state!
-                    updateStatus('📞 Call Received! Connecting...', '#58a6ff');
-                    
-                    currentRoomRef = database.ref('rooms/' + data.roomId);
-                    startWebRTC(false); // Start as Receiver
+            // FIREBASE TRANSACTION: 100% Atomic. No two phones can grab the same slot.
+            database.ref('waiting_slot').transaction(
+                (currentData) => {
+                    // Agar line khali hai, ya samne wala atak gaya hai (>10 sec), toh main line mein lag jaunga
+                    if (currentData === null || (Date.now() - currentData.ts > 10000)) {
+                        matchedPeer = null;
+                        return { id: mySessionId, ts: Date.now() }; 
+                    } else {
+                        // Line mein koi baitha hai!
+                        if (currentData.id === mySessionId) return; // (Security check)
+                        matchedPeer = currentData.id;
+                        return null; // Main is bande ko utha raha hu, line ab aage walo ke liye khali!
+                    }
+                },
+                (error, committed, snapshot) => {
+                    if (error || !committed) {
+                        if (isSearching) bounceBack('Queue busy, retrying...');
+                    } else {
+                        if (matchedPeer) {
+                            // 👑 MAIN BOSS HU: Maine kisi ko line se utha liya!
+                            isSearching = false;
+                            updateStatus('🎯 Found! Initiating connection...', '#58a6ff');
+                            
+                            const roomId = 'room_' + mySessionId + '_' + matchedPeer;
+                            currentRoomRef = database.ref('rooms/' + roomId);
+                            
+                            // Target ko room ki chabhi (invite) bhejo
+                            database.ref('inbox/' + matchedPeer).push({ roomId: roomId });
+                            
+                            startWebRTC(true);
+                        } else {
+                            // ⏳ MAIN TARGET HU: Main chair par baitha hu, aur call ka wait kar raha hu
+                            updateStatus('⏳ Waiting in queue...', '#d29922');
+                            database.ref('waiting_slot').onDisconnect().remove();
+                            
+                            database.ref('inbox/' + mySessionId).on('child_added', (snap) => {
+                                const data = snap.val();
+                                snap.ref.remove().catch(e=>{});
+                                
+                                if (data && data.roomId && isSearching) {
+                                    isSearching = false;
+                                    database.ref('inbox/' + mySessionId).off();
+                                    updateStatus('📞 Connecting to peer...', '#58a6ff');
+                                    
+                                    currentRoomRef = database.ref('rooms/' + data.roomId);
+                                    startWebRTC(false);
+                                }
+                            });
+                        }
+                    }
                 }
-            });
-
-            // 3. I am the BOSS: Scan the lobby for Targets
-            database.ref('lobby').on('child_added', (snapshot) => {
-                const peerId = snapshot.key;
-                const peerData = snapshot.val();
-
-                if (peerId === mySessionId || !isSearching) return;
-
-                // Ignore stale ghost users (older than 15 seconds)
-                if (peerData && peerData.ts && (Date.now() - peerData.ts > 15000)) {
-                    database.ref('lobby/' + peerId).remove().catch(e=>{});
-                    return;
-                }
-
-                // If Math says I am the Boss, I make the move!
-                if (shouldIInitiate(mySessionId, peerId)) {
-                    lockAndPrepare(); // Lock my state!
-                    updateStatus('🎯 Target Locked! Initiating Call...', '#58a6ff');
-
-                    // Create the Room
-                    const roomId = 'room_' + mySessionId + '_' + peerId;
-                    currentRoomRef = database.ref('rooms/' + roomId);
-
-                    // Drop the Room ID into Target's Inbox (1-Step)
-                    database.ref('inbox/' + peerId).push({ roomId: roomId });
-
-                    startWebRTC(true); // Start as Initiator
-                }
-            });
-        }
-
-        // Lock state to prevent Race Conditions
-        function lockAndPrepare() {
-            isSearching = false;
-            database.ref('lobby').off(); // Stop scanning lobby
-            database.ref('inbox/' + mySessionId).off(); // Stop listening to inbox
-            
-            // Remove my presence from the network so nobody else calls me
-            database.ref('lobby/' + mySessionId).remove().catch(e=>{});
-            database.ref('inbox/' + mySessionId).remove().catch(e=>{});
-
-            // Failsafe timer: If webrtc fails to connect in 10s, retry
-            webrtcFailsafeTimer = setTimeout(() => {
-                bounceBack('Network connection timed out. Retrying...');
-            }, 10000); 
+            );
         }
 
         function bounceBack(msg) {
             if (msg) printSystemMessage(msg);
             cleanupAll();
-            setTimeout(initiateMatchmaking, 800); // Retry automatically
+            setTimeout(() => { if(UI.findBtn.style.display === 'none') initiateMatchmaking(); }, 1000);
         }
 
         function cleanupAll() {
@@ -460,24 +438,28 @@
             clearTimeout(webrtcFailsafeTimer);
             pendingIce = [];
 
-            // Kill all listeners and clean DB
-            database.ref('lobby').off();
+            // Safe exit from Queue
+            database.ref('waiting_slot').transaction(currentData => {
+                if (currentData && currentData.id === mySessionId) return null;
+                return currentData; 
+            }).catch(e=>{});
+
             database.ref('inbox/' + mySessionId).off();
-            database.ref('lobby/' + mySessionId).remove().catch(e=>{});
             database.ref('inbox/' + mySessionId).remove().catch(e=>{});
 
             if (currentRoomRef) {
                 currentRoomRef.off();
-                currentRoomRef.remove().catch(e=>{}); // Destroy room on disconnect
+                currentRoomRef.remove().catch(e=>{});
                 currentRoomRef = null;
             }
         }
 
-        // ==============================================================
-        // WEBRTC ENGINE
-        // ==============================================================
         async function startWebRTC(isInitiator) {
             peerConnection = new RTCPeerConnection(rtcConfiguration);
+
+            webrtcFailsafeTimer = setTimeout(() => {
+                bounceBack('Network connection timed out. Retrying...');
+            }, 10000);
 
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate && currentRoomRef) {
@@ -489,7 +471,7 @@
                 if (!peerConnection) return;
                 const state = peerConnection.iceConnectionState;
                 if (state === 'connected' || state === 'completed') {
-                    clearTimeout(webrtcFailsafeTimer); // We connected successfully!
+                    clearTimeout(webrtcFailsafeTimer);
                 } else if (state === 'failed' || state === 'disconnected') {
                     setTimeout(() => {
                         if (peerConnection && (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected')) {
@@ -500,7 +482,6 @@
             };
 
             if (isInitiator) {
-                // THE BOSS (Creates Offer)
                 dataChannel = peerConnection.createDataChannel('chat');
                 setupDataChannel(dataChannel);
 
@@ -512,7 +493,6 @@
                     const answer = snap.val();
                     if (answer && peerConnection.signalingState === 'have-local-offer') {
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                        // Process any ICE candidates that arrived early
                         pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
                         pendingIce = [];
                     }
@@ -527,7 +507,6 @@
                 });
 
             } else {
-                // THE TARGET (Waits for Offer, creates Answer)
                 peerConnection.ondatachannel = (e) => {
                     dataChannel = e.channel;
                     setupDataChannel(dataChannel);
@@ -541,7 +520,6 @@
                         await peerConnection.setLocalDescription(answer);
                         await currentRoomRef.child('answer').set({ sdp: answer.sdp, type: answer.type });
                         
-                        // Process any ICE candidates that arrived early
                         pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
                         pendingIce = [];
                     }
@@ -563,9 +541,6 @@
                 isSearching = false;
                 currentUserState = 'CHATTING';
                 UI.inputArea.style.display = 'flex';
-                
-                // Cleanup DB since we are connected
-                database.ref('lobby/' + mySessionId).remove().catch(e=>{});
                 
                 const introPacket = JSON.stringify({ type: 'intro', profile: myProfile });
                 dataChannel.send(introPacket);
@@ -762,7 +737,7 @@
         function terminateSession(isRemoteDisconnect = false, customMessage = null) {
             clearInterval(adRefreshInterval);
             triggerAdRefresh();
-            cleanupAll(); // Wipes clean
+            cleanupAll(); 
             
             isSearching = false;
             clearTimeout(typingTimer);
