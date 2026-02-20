@@ -241,7 +241,7 @@
 
     <script>
         /* ═══════════════════════════════════════════════════════════════════
-         * THE CTO FIREBASE "ELECTRO MAGNET" ARCHITECTURE 🧲 (SINGLE DB)
+         * CTO ARCHITECTURE: THE "1-STEP ZERO BULLSHIT" FIREBASE ENGINE
          * ═══════════════════════════════════════════════════════════════════ */
 
         const UI = {
@@ -326,9 +326,6 @@
             currentUserState = 'LOBBY';
             triggerAdRefresh();
             updateStatus('Ready to find strangers!', '#3fb950');
-            
-            // Permanent Inbox Listener for Magnet Handshake
-            setupPermanentInboxListener();
         }
 
         let typingTimer = null;
@@ -338,16 +335,15 @@
         let recordTimerInterval = null;
         let recordSeconds = 0;
 
-        let mySessionId = 'peer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        let mySessionId = 'peer_' + Math.random().toString(36).substr(2, 9);
         let isSearching = false;
-        let isLocked = false;
-        let activeTargetId = null;
         let peerConnection = null;
         let dataChannel = null;
-        let webrtcTimeoutTimer = null;
+        let webrtcFailsafeTimer = null;
         let currentRoomRef = null;
-        let roomId = null;
+        let pendingIce = [];
 
+        // Simple Google STUN Servers (100% Reliable)
         const rtcConfiguration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -357,7 +353,7 @@
             ]
         };
 
-        // Boss Algo
+        // BOSS ALGORITHM
         function pairHash(idA, idB) {
             const combined = idA < idB ? idA + '|' + idB : idB + '|' + idA;
             let hash = 5381;
@@ -373,106 +369,119 @@
             return (bit0 ^ lexOrder) === 1;
         }
 
-        // 🧲 PERMANENT INBOX LISTENER (Never turns off, handles the Magnet logic)
-        function setupPermanentInboxListener() {
-            database.ref('inbox/' + mySessionId).on('child_added', (snapshot) => {
-                const data = snapshot.val();
-                snapshot.ref.remove().catch(e=>{}); 
-
-                if (!data || !isSearching) return;
-
-                // 1. We received a Magnet Pull (We are the Target)
-                if (data.type === 'magnet_pull' && !isLocked) {
-                    isLocked = true;
-                    activeTargetId = data.from;
-                    roomId = data.roomId;
-                    currentRoomRef = database.ref('rooms/' + roomId);
-
-                    database.ref('lobby/' + mySessionId).remove();
-                    database.ref('lobby').off();
-
-                    updateStatus('🧲 Link Received! Connecting...', '#58a6ff');
-                    
-                    // Reply with Magnet Accept
-                    database.ref('inbox/' + activeTargetId).push({
-                        type: 'magnet_accept',
-                        from: mySessionId
-                    });
-
-                    startWebRTCFailsafe();
-                    initializeWebRTC(false); // We receive Offer
-                }
-                
-                // 2. We received a Magnet Accept (We are the Initiator)
-                else if (data.type === 'magnet_accept' && isLocked && activeTargetId === data.from) {
-                    updateStatus('🔗 Secure Link Accepted!', '#58a6ff');
-                    startWebRTCFailsafe();
-                    initializeWebRTC(true); // We send Offer
-                }
-            });
-        }
-
-        // ========== FIREBASE MATCHMAKING ==========
+        // ==============================================================
+        // CORE MATCHMAKING LOGIC (1-STEP PROCESS)
+        // ==============================================================
         function initiateMatchmaking() {
             triggerAdRefresh();
-            cleanupWebRTC();
-
-            database.ref('lobby').off();
-            database.ref('lobby/' + mySessionId).remove();
-            if (currentRoomRef) {
-                currentRoomRef.off();
-                currentRoomRef = null;
-            }
+            cleanupAll(); // Destroy old sessions completely
 
             isSearching = true;
-            isLocked = false;
-            activeTargetId = null;
-            roomId = null;
             currentUserState = 'SEARCHING';
-            
             UI.findBtn.style.display = 'none';
             UI.chatBox.innerHTML = '';
-            updateStatus('⚡ Searching for stranger...', '#d29922');
+            
+            updateStatus('⚡ Scanning global network...', '#d29922');
             printSystemMessage('Looking for a stranger...');
 
-            const myLobbyRef = database.ref('lobby/' + mySessionId);
-            myLobbyRef.set(Date.now());
-            myLobbyRef.onDisconnect().remove();
+            // 1. Put myself in the lobby
+            database.ref('lobby/' + mySessionId).set({ ts: Date.now() });
+            database.ref('lobby/' + mySessionId).onDisconnect().remove();
 
+            // 2. I am the TARGET: Wait for Boss to send me a Room ID
+            database.ref('inbox/' + mySessionId).on('child_added', (snapshot) => {
+                const data = snapshot.val();
+                snapshot.ref.remove().catch(e=>{}); // Clear message instantly
+
+                if (data && data.roomId && isSearching) {
+                    lockAndPrepare(); // Lock my state!
+                    updateStatus('📞 Call Received! Connecting...', '#58a6ff');
+                    
+                    currentRoomRef = database.ref('rooms/' + data.roomId);
+                    startWebRTC(false); // Start as Receiver
+                }
+            });
+
+            // 3. I am the BOSS: Scan the lobby for Targets
             database.ref('lobby').on('child_added', (snapshot) => {
                 const peerId = snapshot.key;
-                if (peerId === mySessionId || !isSearching || isLocked) return;
+                const peerData = snapshot.val();
 
+                if (peerId === mySessionId || !isSearching) return;
+
+                // Ignore stale ghost users (older than 15 seconds)
+                if (peerData && peerData.ts && (Date.now() - peerData.ts > 15000)) {
+                    database.ref('lobby/' + peerId).remove().catch(e=>{});
+                    return;
+                }
+
+                // If Math says I am the Boss, I make the move!
                 if (shouldIInitiate(mySessionId, peerId)) {
-                    isLocked = true;
-                    activeTargetId = peerId;
-                    roomId = 'room_' + mySessionId + '_' + peerId;
-                    currentRoomRef = database.ref('rooms/' + roomId);
-                    
-                    myLobbyRef.remove();
-                    database.ref('lobby').off(); 
+                    lockAndPrepare(); // Lock my state!
+                    updateStatus('🎯 Target Locked! Initiating Call...', '#58a6ff');
 
-                    updateStatus('🎯 Target locked! Sending Magnet...', '#58a6ff');
-                    
-                    // 🧲 Send Magnet Pull
-                    database.ref('inbox/' + peerId).push({
-                        type: 'magnet_pull',
-                        from: mySessionId,
-                        roomId: roomId
-                    });
-                    
-                    startWebRTCFailsafe();
+                    // Create the Room
+                    const roomId = 'room_' + mySessionId + '_' + peerId;
+                    currentRoomRef = database.ref('rooms/' + roomId);
+
+                    // Drop the Room ID into Target's Inbox (1-Step)
+                    database.ref('inbox/' + peerId).push({ roomId: roomId });
+
+                    startWebRTC(true); // Start as Initiator
                 }
             });
         }
 
-        function initializeWebRTC(isInitiator) {
-            if (peerConnection) peerConnection.close();
+        // Lock state to prevent Race Conditions
+        function lockAndPrepare() {
+            isSearching = false;
+            database.ref('lobby').off(); // Stop scanning lobby
+            database.ref('inbox/' + mySessionId).off(); // Stop listening to inbox
+            
+            // Remove my presence from the network so nobody else calls me
+            database.ref('lobby/' + mySessionId).remove().catch(e=>{});
+            database.ref('inbox/' + mySessionId).remove().catch(e=>{});
+
+            // Failsafe timer: If webrtc fails to connect in 10s, retry
+            webrtcFailsafeTimer = setTimeout(() => {
+                bounceBack('Network connection timed out. Retrying...');
+            }, 10000); 
+        }
+
+        function bounceBack(msg) {
+            if (msg) printSystemMessage(msg);
+            cleanupAll();
+            setTimeout(initiateMatchmaking, 800); // Retry automatically
+        }
+
+        function cleanupAll() {
+            if (peerConnection) { peerConnection.close(); peerConnection = null; }
+            dataChannel = null;
+            clearTimeout(webrtcFailsafeTimer);
+            pendingIce = [];
+
+            // Kill all listeners and clean DB
+            database.ref('lobby').off();
+            database.ref('inbox/' + mySessionId).off();
+            database.ref('lobby/' + mySessionId).remove().catch(e=>{});
+            database.ref('inbox/' + mySessionId).remove().catch(e=>{});
+
+            if (currentRoomRef) {
+                currentRoomRef.off();
+                currentRoomRef.remove().catch(e=>{}); // Destroy room on disconnect
+                currentRoomRef = null;
+            }
+        }
+
+        // ==============================================================
+        // WEBRTC ENGINE
+        // ==============================================================
+        async function startWebRTC(isInitiator) {
             peerConnection = new RTCPeerConnection(rtcConfiguration);
 
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate && currentRoomRef) {
-                    currentRoomRef.child(isInitiator ? 'callerCandidates' : 'calleeCandidates').push(e.candidate.toJSON());
+                    currentRoomRef.child(isInitiator ? 'callerIce' : 'calleeIce').push(e.candidate.toJSON());
                 }
             };
 
@@ -480,7 +489,7 @@
                 if (!peerConnection) return;
                 const state = peerConnection.iceConnectionState;
                 if (state === 'connected' || state === 'completed') {
-                    clearTimeout(webrtcTimeoutTimer);
+                    clearTimeout(webrtcFailsafeTimer); // We connected successfully!
                 } else if (state === 'failed' || state === 'disconnected') {
                     setTimeout(() => {
                         if (peerConnection && (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected')) {
@@ -491,107 +500,78 @@
             };
 
             if (isInitiator) {
-                // Boss Flow
-                dataChannel = peerConnection.createDataChannel('chat_channel');
-                setupDataChannelListeners(dataChannel);
+                // THE BOSS (Creates Offer)
+                dataChannel = peerConnection.createDataChannel('chat');
+                setupDataChannel(dataChannel);
 
-                peerConnection.createOffer()
-                    .then(offer => peerConnection.setLocalDescription(offer))
-                    .then(() => {
-                        currentRoomRef.child('offer').set({ type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp });
-                    });
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                await currentRoomRef.child('offer').set({ sdp: offer.sdp, type: offer.type });
 
-                currentRoomRef.child('answer').on('value', snap => {
+                currentRoomRef.child('answer').on('value', async (snap) => {
                     const answer = snap.val();
                     if (answer && peerConnection.signalingState === 'have-local-offer') {
-                        peerConnection.setRemoteDescription(new RTCSessionDescription(answer)).catch(e=>{});
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                        // Process any ICE candidates that arrived early
+                        pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
+                        pendingIce = [];
                     }
                 });
 
-                currentRoomRef.child('calleeCandidates').on('child_added', snap => {
-                    const candidate = snap.val();
-                    if (candidate && peerConnection.remoteDescription) {
-                        peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>{});
+                currentRoomRef.child('calleeIce').on('child_added', (snap) => {
+                    if (snap.val()) {
+                        const c = new RTCIceCandidate(snap.val());
+                        if (peerConnection.remoteDescription) peerConnection.addIceCandidate(c).catch(e=>{});
+                        else pendingIce.push(c);
                     }
                 });
 
             } else {
-                // Target Flow
+                // THE TARGET (Waits for Offer, creates Answer)
                 peerConnection.ondatachannel = (e) => {
                     dataChannel = e.channel;
-                    setupDataChannelListeners(dataChannel);
+                    setupDataChannel(dataChannel);
                 };
 
-                currentRoomRef.child('offer').on('value', snap => {
+                currentRoomRef.child('offer').on('value', async (snap) => {
                     const offer = snap.val();
                     if (offer && peerConnection.signalingState === 'stable') {
-                        peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-                            .then(() => peerConnection.createAnswer())
-                            .then(answer => peerConnection.setLocalDescription(answer))
-                            .then(() => {
-                                currentRoomRef.child('answer').set({ type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp });
-                            });
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        await currentRoomRef.child('answer').set({ sdp: answer.sdp, type: answer.type });
+                        
+                        // Process any ICE candidates that arrived early
+                        pendingIce.forEach(c => peerConnection.addIceCandidate(c).catch(e=>{}));
+                        pendingIce = [];
                     }
                 });
 
-                currentRoomRef.child('callerCandidates').on('child_added', snap => {
-                    const candidate = snap.val();
-                    if (candidate && peerConnection.remoteDescription) {
-                        peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>{});
+                currentRoomRef.child('callerIce').on('child_added', (snap) => {
+                    if (snap.val()) {
+                        const c = new RTCIceCandidate(snap.val());
+                        if (peerConnection.remoteDescription) peerConnection.addIceCandidate(c).catch(e=>{});
+                        else pendingIce.push(c);
                     }
                 });
             }
         }
 
-        function bounceBackToLobby(reasonMessage) {
-            if (!isSearching) return;
-            if (reasonMessage) printSystemMessage(reasonMessage);
-            
-            cleanupWebRTC();
-            database.ref('lobby/' + mySessionId).remove();
-            if (currentRoomRef) {
-                currentRoomRef.off();
-                currentRoomRef = null;
-            }
-            
-            isLocked = false;
-            activeTargetId = null;
-            roomId = null;
-            
-            updateStatus('⚡ Scanning for next stranger...', '#d29922');
-            
-            setTimeout(() => {
-                if (isSearching && !isLocked) {
-                    initiateMatchmaking();
-                }
-            }, 800);
-        }
-
-        function startWebRTCFailsafe() {
-            clearTimeout(webrtcTimeoutTimer);
-            webrtcTimeoutTimer = setTimeout(() => {
-                if (isSearching && currentUserState !== 'CHATTING') {
-                    bounceBackToLobby('Network timeout. Scanning next...');
-                }
-            }, 8000);
-        }
-
-        function setupDataChannelListeners(channel) {
+        function setupDataChannel(channel) {
             channel.onopen = () => {
-                clearTimeout(webrtcTimeoutTimer);
+                clearTimeout(webrtcFailsafeTimer);
                 isSearching = false;
                 currentUserState = 'CHATTING';
                 UI.inputArea.style.display = 'flex';
                 
-                database.ref('lobby/' + mySessionId).remove();
+                // Cleanup DB since we are connected
+                database.ref('lobby/' + mySessionId).remove().catch(e=>{});
                 
                 const introPacket = JSON.stringify({ type: 'intro', profile: myProfile });
                 dataChannel.send(introPacket);
 
                 clearInterval(adRefreshInterval);
-                adRefreshInterval = setInterval(() => {
-                    triggerAdRefresh();
-                }, 60000);
+                adRefreshInterval = setInterval(() => { triggerAdRefresh(); }, 60000);
             };
 
             channel.onmessage = (event) => {
@@ -624,13 +604,14 @@
                     else if (data.type === 'typing') {
                         UI.typingIndicator.style.display = data.status ? 'inline-block' : 'none';
                     }
-                } catch(e) {
-                    renderMessage(event.data, 'stranger', 'text');
-                }
+                } catch(e) { renderMessage(event.data, 'stranger', 'text'); }
             };
             channel.onclose = () => terminateSession(true);
         }
 
+        // ==============================================================
+        // UI & MEDIA LOGIC
+        // ==============================================================
         function handleTypingEvent() {
             if (!dataChannel || dataChannel.readyState !== 'open') return;
             if (!amITyping) {
@@ -778,29 +759,12 @@
         
         function handleKeypress(e) { if (e.key === 'Enter') sendDataChannelMessage(); }
 
-        function cleanupWebRTC() {
-            if (peerConnection) { peerConnection.close(); peerConnection = null; }
-            dataChannel = null;
-            clearTimeout(webrtcTimeoutTimer);
-        }
-
         function terminateSession(isRemoteDisconnect = false, customMessage = null) {
             clearInterval(adRefreshInterval);
             triggerAdRefresh();
-            cleanupWebRTC();
-            
-            database.ref('lobby').off();
-            database.ref('lobby/' + mySessionId).remove();
-            
-            if (currentRoomRef) {
-                currentRoomRef.off();
-                currentRoomRef = null;
-            }
-            roomId = null;
+            cleanupAll(); // Wipes clean
             
             isSearching = false;
-            isLocked = false;
-            activeTargetId = null;
             clearTimeout(typingTimer);
             amITyping = false;
             cancelAudioRecording();
@@ -819,7 +783,7 @@
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // 📊 ADMIN SYNC — MQTT Unchanged
+        // 📊 ADMIN SYNC — EMQX Unchanged
         // ═══════════════════════════════════════════════════════════════════
         const adminSyncClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
         adminSyncClient.on('connect', () => {
